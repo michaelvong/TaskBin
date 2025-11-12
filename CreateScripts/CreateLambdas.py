@@ -3,24 +3,24 @@ import os
 import zipfile
 import io
 import time
-import os
+import json
 from botocore.exceptions import ClientError
 
 # --- Configuration ---
-LAMBDA_ROLE_ARN = "arn:aws:iam::508480286587:role/Lambda_TaskBin_Perms"  # <-- Update (MUST UPDATE TO UR OWN LAMBDA PERMS)
+LAMBDA_ROLE_ARN = "arn:aws:iam::508480286587:role/Lambda_TaskBin_Perms"
 LAMBDA_RUNTIME = "python3.13"
 LAMBDA_HANDLER = "lambda_function.lambda_handler"
-REGION = "us-west-1"  # <-- Update if needed
+REGION = "us-west-1"
 BASE_DIR = os.path.dirname(__file__)
-LAMBDA_DIR = os.path.join(BASE_DIR, "Lambdas")  # Folder containing your Lambda .py files
+LAMBDA_DIR = os.path.join(BASE_DIR, "Lambdas")
 TIMEOUT = 30
 MEMORY = 128
+ARN_FILE = os.path.join(BASE_DIR, "lambda_arns.json")  # <-- save ARNs in JSON
 
 lambda_client = boto3.client("lambda", region_name=REGION)
 
 
 def _zip_lambda_function(file_path: str) -> bytes:
-    """Zips a single Lambda file in-memory for upload."""
     zip_buffer = io.BytesIO()
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.write(file_path, arcname="lambda_function.py")
@@ -29,7 +29,6 @@ def _zip_lambda_function(file_path: str) -> bytes:
 
 
 def _generate_lambda_name(file_name: str) -> str:
-    """Converts file name (e.g. board_create.py) → BoardCreateLambda"""
     base = file_name.replace(".py", "")
     parts = base.split("_")
     camel_case = "".join(p.capitalize() for p in parts)
@@ -37,7 +36,6 @@ def _generate_lambda_name(file_name: str) -> str:
 
 
 def _create_or_update_lambda(lambda_name: str, zip_bytes: bytes):
-    """Creates a new Lambda or updates an existing one."""
     try:
         print(f"🟢 Creating Lambda: {lambda_name}")
         lambda_client.create_function(
@@ -67,10 +65,6 @@ def _create_or_update_lambda(lambda_name: str, zip_bytes: bytes):
 
 
 def create_all_lambdas():
-    """
-    Scans the lambdas folder and creates/updates all Lambda functions.
-    Can be safely called from a main orchestrator script.
-    """
     print("🚀 Starting Lambda build process...")
 
     if not os.path.exists(LAMBDA_DIR):
@@ -82,12 +76,40 @@ def create_all_lambdas():
         print("⚠️ No Lambda files found.")
         return
 
+    lambda_arns = {}
+
     for file_name in py_files:
         file_path = os.path.join(LAMBDA_DIR, file_name)
         lambda_name = _generate_lambda_name(file_name)
         print(f"📦 Packaging {file_name} -> {lambda_name}")
         zip_bytes = _zip_lambda_function(file_path)
         _create_or_update_lambda(lambda_name, zip_bytes)
+
+        response = lambda_client.get_function(FunctionName=lambda_name)
+        lambda_arn = response["Configuration"]["FunctionArn"]
+        lambda_arns[lambda_name] = lambda_arn
+
         time.sleep(1)
+        print("*" * 80)
 
     print("✅ All Lambdas deployed successfully.")
+
+    # Save all Lambda ARNs to JSON file
+    with open(ARN_FILE, "w") as f:
+        json.dump(lambda_arns, f, indent=4)
+    print(f"💾 Saved all Lambda ARNs to {ARN_FILE}")
+
+    # Map main WebSocket Lambdas
+    ws_lambdas = {
+        "connect_lambda_arn": lambda_arns.get(_generate_lambda_name("socket_connect.py")),
+        "disconnect_lambda_arn": lambda_arns.get(_generate_lambda_name("socket_disconnect.py")),
+        "sendmessage_lambda_arn": lambda_arns.get(_generate_lambda_name("socket_sendmsg.py")),
+    }
+
+    # Check for missing ARNs
+    for key, arn in ws_lambdas.items():
+        if not arn:
+            print(f"❌ Warning: {key} not found!")
+
+    print("🔗 WebSocket Lambda ARNs:", ws_lambdas)
+    return ws_lambdas
