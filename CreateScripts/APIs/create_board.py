@@ -33,58 +33,6 @@ def get_lambda_arn(lambda_name):
         raise ValueError(f"Lambda ARN not found for {lambda_name}")
     return arn
 
-
-# ---------------------------
-# Lambda handler
-# ---------------------------
-def lambda_handler(event, context):
-    """
-    Lambda endpoint to create a new board.
-    Expects JSON body:
-    {
-        "user_id": "<user-uuid>",
-        "board_name": "<string>",
-        "description": "<optional string>"
-    }
-    """
-    print("Lambda invoked! Event:", json.dumps(event))  # Debug print
-
-    try:
-        if "body" in event:
-            body = json.loads(event["body"])
-        else:
-            body = event
-
-        user_id = body.get("user_id")
-        board_name = body.get("board_name")
-        description = body.get("description", "")
-
-        if not user_id or not board_name:
-            return {"statusCode": 400, "body": json.dumps({"error": "Missing required fields"})}
-
-        board_id = str(uuid.uuid4())
-        now_iso = datetime.now(timezone.utc).isoformat()
-
-        board_item = {
-            "PK": f"USER#{user_id}",
-            "SK": f"BOARD#{board_id}",
-            "Type": "board",
-            "board_id": board_id,
-            "owner_id": user_id,
-            "board_name": board_name,
-            "description": description,
-            "created_at": now_iso
-        }
-
-        table.put_item(Item=board_item)
-
-        return {"statusCode": 201, "body": json.dumps({"board_id": board_id, "board_name": board_name})}
-
-    except Exception as e:
-        print("Error creating board:", e)
-        return {"statusCode": 500, "body": json.dumps({"error": str(e)})}
-
-
 # ---------------------------
 # Orchestrator API creation
 # ---------------------------

@@ -33,49 +33,6 @@ def get_lambda_arn(lambda_name):
 
 
 # ---------------------------
-# Lambda handler
-# ---------------------------
-def lambda_handler(event, context):
-    """
-    Lambda endpoint to delete a board.
-    Expects JSON body:
-    {
-        "user_id": "<user-uuid>",
-        "board_id": "<board-uuid>"
-    }
-    """
-    print("Lambda invoked! Event:", json.dumps(event))  # Debug print
-
-    try:
-        if "body" in event:
-            body = json.loads(event["body"])
-        else:
-            body = event
-
-        user_id = body.get("user_id")
-        board_id = body.get("board_id")
-
-        if not user_id or not board_id:
-            return {"statusCode": 400, "body": json.dumps({"error": "Missing required fields"})}
-
-        pk = f"USER#{user_id}"
-        sk = f"BOARD#{board_id}"
-
-        response = table.delete_item(
-            Key={"PK": pk, "SK": sk},
-            ConditionExpression="attribute_exists(PK) AND attribute_exists(SK)"
-        )
-
-        return {"statusCode": 200, "body": json.dumps({"message": f"Board {board_id} deleted"})}
-
-    except boto3.client("dynamodb").exceptions.ConditionalCheckFailedException:
-        return {"statusCode": 404, "body": json.dumps({"error": "Board not found"})}
-    except Exception as e:
-        print("Error deleting board:", e)
-        return {"statusCode": 500, "body": json.dumps({"error": str(e)})}
-
-
-# ---------------------------
 # Orchestrator API creation
 # ---------------------------
 def create_api(lambda_name="TaskBin_DeleteBoard", api_name=None, account_id=None):
