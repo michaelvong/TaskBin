@@ -1,11 +1,13 @@
 import os
 import importlib.util
 import json
+import boto3
 
 # Folder containing your individual API scripts
 APIS_DIR = os.path.join(os.path.dirname(__file__), "APIs")
 API_ID_FILE = os.path.join(os.path.dirname(__file__), "api_ids.json")
-
+sts_client = boto3.client("sts")
+account_id = sts_client.get_caller_identity()["Account"]
 
 def create_all_apis():
     """
@@ -37,7 +39,7 @@ def create_all_apis():
         if hasattr(module, "create_api") and callable(module.create_api):
             print(f"🚀 Creating API from script: {module_name}")
             try:
-                api_info = module.create_api()  # Each script returns {"api_id":..., "endpoint":...}
+                api_info = module.create_api(account_id=account_id)  # Each script returns {"api_id":..., "endpoint":...}
                 api_info_dict[module_name] = api_info
                 print(f"✅ API created: {api_info}")
             except Exception as e:
