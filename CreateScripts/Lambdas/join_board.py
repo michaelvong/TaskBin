@@ -1,109 +1,122 @@
 import json
 import boto3
-from datetime import datetime, timezone
+import time
 from botocore.exceptions import ClientError
 
-# --- DynamoDB single table name ---
 TABLE_NAME = "TaskBin"
-
-# --- Initialize DynamoDB resource ---
 dynamodb = boto3.resource("dynamodb")
 table = dynamodb.Table(TABLE_NAME)
 
 
 def lambda_handler(event, context):
     """
-    Lambda to let a user join a board.
-    Expects event to contain JSON body:
+    Handles joining a board through a valid access code.
+    Input JSON should contain:
     {
-        "user_id": "<user-uuid>",
-        "board_id": "<board-uuid>"
+        "user_id": "<uuid>",
+        "access_code": "<ABC123>"
     }
-
-    Data model:
-    - User-centric row: PK = USER#<user_id>, SK = BOARD#<board_id>
-    - Board-centric membership row (optional): PK = BOARD#<board_id>, SK = USER#<user_id>
     """
 
     try:
-        # --- Parse input body ---
+        # ---------------------------------
+        # Parse request body
+        # ---------------------------------
         if "body" in event:
             body = json.loads(event["body"])
         else:
             body = event
 
         user_id = body.get("user_id")
-        board_id = body.get("board_id")
+        access_code = body.get("access_code")
 
-        if not user_id or not board_id:
+        if not user_id or not access_code:
             return {
                 "statusCode": 400,
-                "body": json.dumps({"error": "Missing required fields: user_id, board_id"})
+                "body": json.dumps({"error": "Missing required fields: user_id, access_code"})
             }
 
-        # --- Get board owner row ---
-        owner_row = table.scan(
-            FilterExpression="#T = :type_val AND SK = :sk_val",
-            ExpressionAttributeNames={"#T": "Type"},  # alias for reserved keyword
+        user_pk = f"USER#{user_id}"
+        access_pk = f"ACCESS_CODE#{access_code}"
+
+        # ---------------------------------
+        # Look up the access code entry
+        # ---------------------------------
+        code_resp = table.get_item(Key={"PK": access_pk, "SK": "ACCESS"})
+        code_item = code_resp.get("Item")
+
+        if not code_item:
+            return {
+                "statusCode": 404,
+                "body": json.dumps({"error": "Invalid or expired access code"})
+            }
+
+        board_id = code_item.get("board_id")
+        if not board_id:
+            return {
+                "statusCode": 500,
+                "body": json.dumps({"error": "Corrupted access code entry: missing board_id"})
+            }
+
+        board_sk = f"BOARD#{board_id}"
+
+        # ---------------------------------
+        # Verify board exists (owner row must exist)
+        # ---------------------------------
+        # Query for a PK that begins with USER# and SK=BOARD#board_id
+        owner_query = table.scan(
+            FilterExpression="SK = :sk AND begins_with(PK, :prefix)",
             ExpressionAttributeValues={
-                ":type_val": "board",
-                ":sk_val": f"BOARD#{board_id}"
-            },
-            Limit=1
+                ":sk": board_sk,
+                ":prefix": "USER#"
+            }
         ).get("Items", [])
 
-        if not owner_row:
+        if not owner_query:
             return {
                 "statusCode": 404,
                 "body": json.dumps({"error": "Board not found"})
             }
 
-        owner_row = owner_row[0]
-        owner_id = owner_row["owner_id"]
+        owner_item = owner_query[0]
+        owner_id = owner_item["owner_id"]
 
-        # --- Check if user is already a member ---
-        existing = table.get_item(
-            Key={
-                "PK": f"USER#{user_id}",
-                "SK": f"BOARD#{board_id}"
-            }
-        ).get("Item")
-
-        if existing:
+        # ---------------------------------
+        # Check if the user is already a member
+        # ---------------------------------
+        existing_resp = table.get_item(Key={"PK": user_pk, "SK": board_sk})
+        if "Item" in existing_resp:
             return {
-                "statusCode": 400,
-                "body": json.dumps({"error": "User is already a member of this board"})
+                "statusCode": 409,
+                "body": json.dumps({"error": "User already joined this board"})
             }
 
-        # --- Prepare timestamps ---
-        now_iso = datetime.now(timezone.utc).isoformat()
-
-        # --- User-centric board row ---
-        user_board_row = {
-            "PK": f"USER#{user_id}",
-            "SK": f"BOARD#{board_id}",
-            "Type": "membership",
+        # ---------------------------------
+        # Add membership row
+        # ---------------------------------
+        membership_item = {
+            "PK": user_pk,
+            "SK": board_sk,
             "board_id": board_id,
+            "user_id": user_id,
             "owner_id": owner_id,
             "role": "member",
-            "joined_at": now_iso
+            "joined_at": int(time.time())
         }
 
-        with table.batch_writer() as batch:
-            batch.put_item(Item=user_board_row)
+        table.put_item(Item=membership_item)
 
         return {
-            "statusCode": 201,
+            "statusCode": 200,
             "body": json.dumps({
-                "message": f"User {user_id} joined board {board_id} successfully",
+                "message": "Joined board successfully",
                 "board_id": board_id,
-                "user_id": user_id,
                 "owner_id": owner_id
             })
         }
 
     except ClientError as e:
-        print("DynamoDB error:", e)
+        print("DynamoDB error:", e.response["Error"])
         return {"statusCode": 500, "body": json.dumps({"error": str(e)})}
 
     except Exception as e:
