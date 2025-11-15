@@ -44,6 +44,8 @@ def lambda_handler(event, context):
         "board_id": "<board-uuid>"
     }
     """
+    print("Lambda invoked! Event:", json.dumps(event))  # Debug print
+
     try:
         if "body" in event:
             body = json.loads(event["body"])
@@ -76,19 +78,24 @@ def lambda_handler(event, context):
 # ---------------------------
 # Orchestrator API creation
 # ---------------------------
-def create_api(lambda_name="TaskBin_DeleteBoard", api_name=None):
+def create_api(lambda_name="TaskBin_DeleteBoard", api_name=None, account_id=None):
     """
     Creates an AWS HTTP API Gateway endpoint and integrates it with the Lambda.
     lambda_name: Name of the Lambda as stored in lambda_arns.json
     api_name: optional name for the API
+    account_id: AWS account ID (needed for Lambda permission)
     Returns: dict with api_id and endpoint URL
     """
+    if account_id is None:
+        raise ValueError("You must provide your AWS account_id for Lambda permission.")
+
     lambda_arn = get_lambda_arn(lambda_name)
 
     if not api_name:
         api_name = "DeleteBoardAPI"
 
     apigw = boto3.client("apigatewayv2")
+    lambda_client = boto3.client("lambda")
 
     # 1️⃣ Create the HTTP API
     api_resp = apigw.create_api(
@@ -102,8 +109,7 @@ def create_api(lambda_name="TaskBin_DeleteBoard", api_name=None):
         ApiId=api_id,
         IntegrationType="AWS_PROXY",
         IntegrationUri=lambda_arn,
-        PayloadFormatVersion="2.0",
-        IntegrationMethod="POST"
+        PayloadFormatVersion="2.0"
     )
     integration_id = integration_resp["IntegrationId"]
 
@@ -114,7 +120,21 @@ def create_api(lambda_name="TaskBin_DeleteBoard", api_name=None):
         Target=f"integrations/{integration_id}"
     )
 
-    # 4️⃣ Deploy stage
+    # 4️⃣ Give API Gateway permission to invoke the Lambda
+    statement_id = f"apigateway-{api_id}"
+    try:
+        lambda_client.add_permission(
+            FunctionName=lambda_name,
+            StatementId=statement_id,
+            Action="lambda:InvokeFunction",
+            Principal="apigateway.amazonaws.com",
+            SourceArn=f"arn:aws:execute-api:{apigw.meta.region_name}:{account_id}:{api_id}/*/POST/deleteBoard"
+        )
+        print(f"✅ Lambda permission added for API Gateway (StatementId: {statement_id})")
+    except lambda_client.exceptions.ResourceConflictException:
+        print(f"⚠️ Permission already exists: {statement_id}")
+
+    # 5️⃣ Deploy stage
     stage_resp = apigw.create_stage(
         ApiId=api_id,
         StageName="dev",

@@ -34,7 +34,6 @@ def lambda_handler(event, context):
             body = json.loads(event["body"])
         else:
             body = event
-
         user_id = body.get("user_id")
         board_name = body.get("board_name")
         description = body.get("description", "")
