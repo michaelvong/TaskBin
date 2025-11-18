@@ -14,7 +14,10 @@ def lambda_handler(event, context):
     """
     Lambda to delete a board from DynamoDB.
     Only the owner can delete the board.
-    Deletes all user-centric rows using batch_writer with deduplication.
+    Deletes the 3 entries created by create_board:
+    - (USER, BOARD)
+    - (BOARD, USER)
+    - (BOARD, METADATA)
     Expects event to contain JSON body:
     {
         "user_id": "<owner-uuid>",
@@ -39,10 +42,11 @@ def lambda_handler(event, context):
             }
 
         owner_pk = f"USER#{user_id}"
+        board_pk = f"BOARD#{board_id}"
         board_sk = f"BOARD#{board_id}"
 
-        # --- Get the board item to verify ownership ---
-        response = table.get_item(Key={"PK": owner_pk, "SK": board_sk})
+        # --- Get the board metadata to verify ownership ---
+        response = table.get_item(Key={"PK": board_pk, "SK": "METADATA"})
         board_item = response.get("Item")
 
         if not board_item:
@@ -51,35 +55,32 @@ def lambda_handler(event, context):
         if board_item.get("owner_id") != user_id:
             return {"statusCode": 403, "body": json.dumps({"error": "Only the owner can delete this board"})}
 
-        # --- Scan for all user-centric rows with this board SK ---
-        member_rows = table.scan(
-            FilterExpression="SK = :sk AND begins_with(PK, :prefix)",
+        # --- Delete (USER, BOARD) membership entry ---
+        table.delete_item(Key={"PK": owner_pk, "SK": board_sk})
+
+        # --- Delete (BOARD, USER) reverse membership entries ---
+        # Query all SKs that start with USER# under this board PK
+        response = table.query(
+            KeyConditionExpression="PK = :board_pk AND begins_with(SK, :user_prefix)",
             ExpressionAttributeValues={
-                ":sk": board_sk,
-                ":prefix": "USER#"
+                ":board_pk": board_pk,
+                ":user_prefix": "USER#"
             }
-        ).get("Items", [])
+        )
+        board_user_items = response.get("Items", [])
 
-        # --- Deduplicate and prepare keys for batch delete ---
-        unique_keys = set()
-        # Add owner row
-        unique_keys.add((owner_pk, board_sk))
-        # Add member rows
-        for member in member_rows:
-            member_pk = member["PK"]
-            if member_pk == owner_pk:
-                continue  # skip owner
-            unique_keys.add((member_pk, board_sk))
-
-        # --- Delete all rows in batch ---
+        # Batch delete all (BOARD, USER) entries
         with table.batch_writer() as batch:
-            for pk, sk in unique_keys:
-                batch.delete_item(Key={"PK": pk, "SK": sk})
+            for item in board_user_items:
+                batch.delete_item(Key={"PK": item["PK"], "SK": item["SK"]})
+
+        # --- Delete (BOARD, METADATA) entry ---
+        table.delete_item(Key={"PK": board_pk, "SK": "METADATA"})
 
         return {
             "statusCode": 200,
             "body": json.dumps({
-                "message": f"Board {board_id} and all memberships to board deleted successfully"
+                "message": f"Board {board_id} and all memberships deleted successfully"
             })
         }
 

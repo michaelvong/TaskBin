@@ -16,6 +16,7 @@ def lambda_handler(event, context):
         "user_id": "<uuid>",
         "access_code": "<ABC123>"
     }
+    Creates both (USER, BOARD) and (BOARD, USER) entries.
     """
 
     try:
@@ -63,7 +64,6 @@ def lambda_handler(event, context):
         # ---------------------------------
         # Verify board exists (owner row must exist)
         # ---------------------------------
-        # Query for a PK that begins with USER# and SK=BOARD#board_id
         owner_query = table.scan(
             FilterExpression="SK = :sk AND begins_with(PK, :prefix)",
             ExpressionAttributeValues={
@@ -91,20 +91,38 @@ def lambda_handler(event, context):
                 "body": json.dumps({"error": "User already joined this board"})
             }
 
-        # ---------------------------------
-        # Add membership row
-        # ---------------------------------
-        membership_item = {
-            "PK": user_pk,
-            "SK": board_sk,
-            "board_id": board_id,
-            "user_id": user_id,
-            "owner_id": owner_id,
-            "role": "member",
-            "joined_at": int(time.time())
-        }
+        now_ts = int(time.time())
 
-        table.put_item(Item=membership_item)
+        # ---------------------------------
+        # Add membership rows
+        # ---------------------------------
+        # USER -> BOARD
+        table.put_item(
+            Item={
+                "PK": user_pk,
+                "SK": board_sk,
+                "board_id": board_id,
+                "user_id": user_id,
+                "owner_id": owner_id,
+                "role": "member",
+                "joined_at": now_ts,
+                "type": "membership"
+            }
+        )
+
+        # BOARD -> USER (reverse lookup)
+        table.put_item(
+            Item={
+                "PK": f"BOARD#{board_id}",
+                "SK": f"USER#{user_id}",
+                "board_id": board_id,
+                "user_id": user_id,
+                "owner_id": owner_id,
+                "role": "member",
+                "joined_at": now_ts,
+                "type": "board_user"
+            }
+        )
 
         return {
             "statusCode": 200,

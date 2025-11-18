@@ -14,26 +14,25 @@ table = dynamodb.Table(TABLE_NAME)
 
 def lambda_handler(event, context):
     """
-    Lambda to create a new board and associate it with a user.
-    Expects event to contain JSON body:
-    {
-        "user_id": "<user-uuid>",
-        "board_name": "<string>",
-        "description": "<optional string>"
-    }
+    Create a board with 3 entries:
 
-    Data model (single table):
-    PK = "USER#<user_id>"
-    SK = "BOARD#<board_id>"
-    Type = "board"
+    1. (USER, BOARD)
+       PK = USER#<user_id>
+       SK = BOARD#<board_id>
+
+    2. (BOARD, USER)
+       PK = BOARD#<board_id>
+       SK = USER#<user_id>
+
+    3. (BOARD, METADATA)
+       PK = BOARD#<board_id>
+       SK = METADATA
     """
 
     try:
-        # Parse input body (handle API Gateway or direct invocation)
-        if "body" in event:
-            body = json.loads(event["body"])
-        else:
-            body = event
+        # Parse body from API Gateway or direct test
+        body = json.loads(event["body"]) if "body" in event else event
+
         user_id = body.get("user_id")
         board_name = body.get("board_name")
         description = body.get("description", "")
@@ -44,27 +43,64 @@ def lambda_handler(event, context):
                 "body": json.dumps({"error": "Missing required fields: user_id, board_name"})
             }
 
-        # --- Generate a unique board ID ---
+        # Generate a unique board ID
         board_id = str(uuid.uuid4())
+        now = datetime.now(timezone.utc).isoformat()
 
-        # --- Construct board item with owner_id and role ---
-        board_item = {
+        # ----------------------------------------------------------------------
+        # 1. USER → BOARD membership entry
+        # ----------------------------------------------------------------------
+        user_board_item = {
             "PK": f"USER#{user_id}",
             "SK": f"BOARD#{board_id}",
-            "Type": "board",
+            "type": "membership",
             "board_id": board_id,
-            "user_id": user_id,        # optional, same as owner_id
-            "owner_id": user_id,       # explicit owner
-            "role": "owner",           # role for RBAC
-            "board_name": board_name,
-            "description": description,
-            "created_at": datetime.now(timezone.utc).isoformat(),
+            "user_id": user_id,
+            "role": "owner",
+            "joined_at": now
         }
 
-        # --- Put the board item into the table ---
-        table.put_item(Item=board_item)
+        # ----------------------------------------------------------------------
+        # 2. BOARD → USER reverse membership
+        # ----------------------------------------------------------------------
+        board_user_item = {
+            "PK": f"BOARD#{board_id}",
+            "SK": f"USER#{user_id}",
+            "type": "board_user",
+            "board_id": board_id,
+            "user_id": user_id,
+            "role": "owner",
+            "joined_at": now
+        }
 
-        # --- Return success ---
+        # ----------------------------------------------------------------------
+        # 3. BOARD → METADATA entry
+        # ----------------------------------------------------------------------
+        board_metadata_item = {
+            "PK": f"BOARD#{board_id}",
+            "SK": "METADATA",
+            "type": "board_metadata",
+            "board_id": board_id,
+            "board_name": board_name,
+            "description": description,
+            "owner_id": user_id,
+            "created_at": now,
+        }
+
+        # ----------------------------------------------------------------------
+        # Write all 3 in a DynamoDB transaction (atomic)
+        # ----------------------------------------------------------------------
+        dynamodb.meta.client.transact_write_items(
+            TransactItems=[
+                {"Put": {"TableName": TABLE_NAME, "Item": user_board_item}},
+                {"Put": {"TableName": TABLE_NAME, "Item": board_user_item}},
+                {"Put": {"TableName": TABLE_NAME, "Item": board_metadata_item}}
+            ]
+        )
+
+        # ----------------------------------------------------------------------
+        # Success Response
+        # ----------------------------------------------------------------------
         return {
             "statusCode": 201,
             "body": json.dumps({
@@ -76,14 +112,8 @@ def lambda_handler(event, context):
 
     except ClientError as e:
         print("DynamoDB error:", e)
-        return {
-            "statusCode": 500,
-            "body": json.dumps({"error": str(e)})
-        }
+        return {"statusCode": 500, "body": json.dumps({"error": str(e)})}
 
     except Exception as e:
         print("Error:", e)
-        return {
-            "statusCode": 500,
-            "body": json.dumps({"error": str(e)})
-        }
+        return {"statusCode": 500, "body": json.dumps({"error": str(e)})}
