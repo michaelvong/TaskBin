@@ -33,7 +33,7 @@ def main():
         print("Deleted WebSocket API ID file.")
 
     results = delete_all_apis()
-    print("All APIs deletion results:", results)
+    print("API deletion results:", results)
 
     # ✅ Delete the Lambda ARNs file
     if os.path.exists(lambda_arns_file):
