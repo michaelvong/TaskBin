@@ -9,15 +9,6 @@ table = dynamodb.Table(TABLE_NAME)
 
 
 def lambda_handler(event, context):
-    """
-    Handles joining a board through a valid access code.
-    Input JSON should contain:
-    {
-        "user_id": "<uuid>",
-        "access_code": "<ABC123>"
-    }
-    Creates both (USER, BOARD) and (BOARD, USER) entries.
-    """
 
     try:
         # ---------------------------------
@@ -41,7 +32,7 @@ def lambda_handler(event, context):
         access_pk = f"ACCESS_CODE#{access_code}"
 
         # ---------------------------------
-        # Look up the access code entry
+        # Look up ACCESS entry
         # ---------------------------------
         code_resp = table.get_item(Key={"PK": access_pk, "SK": "ACCESS"})
         code_item = code_resp.get("Item")
@@ -62,9 +53,10 @@ def lambda_handler(event, context):
         board_sk = f"BOARD#{board_id}"
 
         # ---------------------------------
-        # Verify board exists (owner row must exist)
+        # Verify the board exists
+        # (owner record must exist, but we don't use it)
         # ---------------------------------
-        owner_query = table.scan(
+        owner_item = table.scan(
             FilterExpression="SK = :sk AND begins_with(PK, :prefix)",
             ExpressionAttributeValues={
                 ":sk": board_sk,
@@ -72,17 +64,16 @@ def lambda_handler(event, context):
             }
         ).get("Items", [])
 
-        if not owner_query:
+        if not owner_item:
             return {
                 "statusCode": 404,
                 "body": json.dumps({"error": "Board not found"})
             }
 
-        owner_item = owner_query[0]
-        owner_id = owner_item["owner_id"]
+        # We do NOT extract owner_id or do anything with it anymore.
 
         # ---------------------------------
-        # Check if the user is already a member
+        # Check if user already belongs to the board
         # ---------------------------------
         existing_resp = table.get_item(Key={"PK": user_pk, "SK": board_sk})
         if "Item" in existing_resp:
@@ -94,30 +85,26 @@ def lambda_handler(event, context):
         now_ts = int(time.time())
 
         # ---------------------------------
-        # Add membership rows
+        # Add membership rows (USER->BOARD and BOARD->USER)
         # ---------------------------------
-        # USER -> BOARD
         table.put_item(
             Item={
                 "PK": user_pk,
                 "SK": board_sk,
                 "board_id": board_id,
                 "user_id": user_id,
-                "owner_id": owner_id,
                 "role": "member",
                 "joined_at": now_ts,
                 "type": "membership"
             }
         )
 
-        # BOARD -> USER (reverse lookup)
         table.put_item(
             Item={
                 "PK": f"BOARD#{board_id}",
                 "SK": f"USER#{user_id}",
                 "board_id": board_id,
                 "user_id": user_id,
-                "owner_id": owner_id,
                 "role": "member",
                 "joined_at": now_ts,
                 "type": "board_user"
@@ -128,8 +115,7 @@ def lambda_handler(event, context):
             "statusCode": 200,
             "body": json.dumps({
                 "message": "Joined board successfully",
-                "board_id": board_id,
-                "owner_id": owner_id
+                "board_id": board_id
             })
         }
 
