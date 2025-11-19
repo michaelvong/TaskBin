@@ -9,7 +9,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # DeleteScript folder
 create_scripts_dir = os.path.join(BASE_DIR, "CreateScripts")
 lambda_arns_file = os.path.join(create_scripts_dir, "lambda_arns.json")
 lambda_arns_file = os.path.abspath(lambda_arns_file)
-api_file = os.path.join(create_scripts_dir, "api_ids.json")
+api_file = os.path.join(BASE_DIR, "..", "api_id.json")
 api_file = os.path.abspath(api_file)
 
 def main():
