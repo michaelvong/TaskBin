@@ -1,6 +1,5 @@
 import json
 import boto3
-from datetime import datetime, timezone
 from botocore.exceptions import ClientError
 
 # --- DynamoDB table ---
@@ -11,28 +10,30 @@ table = dynamodb.Table(TABLE_NAME)
 def lambda_handler(event, context):
     """
     Lambda to edit board metadata.
-    Input JSON:
+    Path: PUT /boards/{board_id}
+
+    Body JSON:
     {
-        "user_id": "<uuid>",      # must be the owner
-        "board_id": "<board-uuid>",
+        "user_id": "<uuid>",       # must be the owner
         "board_name": "<optional new name>",
         "description": "<optional new description>"
     }
     """
     try:
-        # Parse input body
-        if "body" in event:
-            body = json.loads(event["body"])
-        else:
-            body = event
+        # --- Grab board_id from URL path ---
+        path_params = event.get("pathParameters", {})
+        board_id = path_params.get("board_id")
+        if not board_id:
+            return {"statusCode": 400, "body": json.dumps({"error": "Missing board_id in path"})}
 
+        # --- Parse body ---
+        body = json.loads(event.get("body", "{}"))
         user_id = body.get("user_id")
-        board_id = body.get("board_id")
         new_name = body.get("board_name")
         new_description = body.get("description")
 
-        if not user_id or not board_id:
-            return {"statusCode": 400, "body": json.dumps({"error": "Missing required fields: user_id, board_id"})}
+        if not user_id:
+            return {"statusCode": 400, "body": json.dumps({"error": "Missing user_id in body"})}
 
         board_pk = f"BOARD#{board_id}"
         metadata_sk = "METADATA"
@@ -47,7 +48,7 @@ def lambda_handler(event, context):
         if metadata_item.get("owner_id") != user_id:
             return {"statusCode": 403, "body": json.dumps({"error": "Only the owner can edit the board"})}
 
-        # --- Prepare update expressions ---
+        # --- Prepare update expression ---
         update_expr = []
         expr_values = {}
 
@@ -58,31 +59,48 @@ def lambda_handler(event, context):
             update_expr.append("description = :desc")
             expr_values[":desc"] = new_description
 
-        if update_expr:
-            # --- Update metadata row ---
+        if not update_expr:
+            return {"statusCode": 400, "body": json.dumps({"error": "No fields to update"})}
+
+        update_expression_str = "SET " + ", ".join(update_expr)
+
+        # --- 1️⃣ Update metadata row ---
+        table.update_item(
+            Key={"PK": board_pk, "SK": metadata_sk},
+            UpdateExpression=update_expression_str,
+            ExpressionAttributeValues=expr_values
+        )
+
+        # --- 2️⃣ Update all board-centric task rows ---
+        board_tasks = table.query(
+            KeyConditionExpression=boto3.dynamodb.conditions.Key("PK").eq(board_pk) &
+                                   boto3.dynamodb.conditions.Key("SK").begins_with("TASK#")
+        ).get("Items", [])
+
+        for task in board_tasks:
             table.update_item(
-                Key={"PK": board_pk, "SK": metadata_sk},
-                UpdateExpression="SET " + ", ".join(update_expr),
+                Key={"PK": task["PK"], "SK": task["SK"]},
+                UpdateExpression=update_expression_str,
                 ExpressionAttributeValues=expr_values
             )
 
-            # --- Update all user-centric board rows ---
-            # Scan all USER#<user_id> rows with this board SK
-            member_rows = table.scan(
-                FilterExpression="SK = :sk AND begins_with(PK, :prefix)",
-                ExpressionAttributeValues={
-                    ":sk": f"BOARD#{board_id}",
-                    ":prefix": "USER#"
-                }
-            ).get("Items", [])
+        # --- 3️⃣ Update all user-centric task rows ---
+        # Scan for USER#<user_id> rows for this board
+        user_task_rows = table.scan(
+            FilterExpression="SK = :sk AND begins_with(PK, :prefix)",
+            ExpressionAttributeValues={
+                ":sk": f"BOARD#{board_id}",
+                ":prefix": "USER#"
+            }
+        ).get("Items", [])
 
-            with table.batch_writer() as batch:
-                for member in member_rows:
-                    batch.update_item(
-                        Key={"PK": member["PK"], "SK": member["SK"]},
-                        UpdateExpression="SET " + ", ".join(update_expr),
-                        ExpressionAttributeValues=expr_values
-                    )
+        for user_task in user_task_rows:
+            # Update only the user-centric tasks
+            table.update_item(
+                Key={"PK": user_task["PK"], "SK": user_task["SK"]},
+                UpdateExpression=update_expression_str,
+                ExpressionAttributeValues=expr_values
+            )
 
         return {
             "statusCode": 200,

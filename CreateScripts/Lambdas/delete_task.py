@@ -7,14 +7,15 @@ TABLE_NAME = "TaskBin"
 dynamodb = boto3.resource("dynamodb")
 table = dynamodb.Table(TABLE_NAME)
 
+
 def lambda_handler(event, context):
     """
     Lambda to delete a task.
-    Input JSON:
+    Path: DELETE /boards/{board_id}/tasks/{task_id}
+
+    Body JSON:
     {
-        "user_id": "<uuid>",   # who is requesting deletion
-        "board_id": "<board-uuid>",
-        "task_id": "<task-uuid>"
+        "user_id": "<uuid>"   # who is requesting deletion
     }
 
     Deletes:
@@ -25,25 +26,65 @@ def lambda_handler(event, context):
 
     try:
         # ---------------------------------
-        # Parse request body
+        # Parse path parameters
         # ---------------------------------
-        if "body" in event:
-            body = json.loads(event["body"])
-        else:
-            body = event
+        path_params = event.get("pathParameters", {})
+        board_id = path_params.get("board_id")
+        task_id = path_params.get("task_id")
 
-        user_id = body.get("user_id")
-        board_id = body.get("board_id")
-        task_id = body.get("task_id")
-
-        if not user_id or not board_id or not task_id:
+        if not board_id or not task_id:
             return {
                 "statusCode": 400,
-                "body": json.dumps({"error": "Missing required fields: user_id, board_id, task_id"})
+                "body": json.dumps({"error": "Missing required path parameters: board_id, task_id"})
+            }
+
+        # ---------------------------------
+        # Parse request body for user_id
+        # ---------------------------------
+        if "body" in event and event["body"]:
+            body = json.loads(event["body"])
+        else:
+            body = {}
+
+        user_id = body.get("user_id")
+        if not user_id:
+            return {
+                "statusCode": 400,
+                "body": json.dumps({"error": "Missing required field in body: user_id"})
             }
 
         board_sk = f"BOARD#{board_id}"
         task_sk = f"TASK#{task_id}"
+
+        # ---------------------------------
+        # Verify board exists
+        # ---------------------------------
+        board_lookup = table.scan(
+            FilterExpression="SK = :sk AND begins_with(PK, :prefix)",
+            ExpressionAttributeValues={
+                ":sk": board_sk,
+                ":prefix": "USER#"
+            }
+        ).get("Items", [])
+
+        if not board_lookup:
+            return {
+                "statusCode": 404,
+                "body": json.dumps({"error": "Board not found"})
+            }
+
+        # ---------------------------------
+        # Verify user is a member or owner of the board
+        # ---------------------------------
+        user_board_item = table.get_item(
+            Key={"PK": f"USER#{user_id}", "SK": board_sk}
+        ).get("Item")
+
+        if not user_board_item:
+            return {
+                "statusCode": 403,
+                "body": json.dumps({"error": "User is not authorized to delete tasks on this board"})
+            }
 
         # ---------------------------------
         # Get board-centric task row
@@ -55,13 +96,6 @@ def lambda_handler(event, context):
             return {"statusCode": 404, "body": json.dumps({"error": "Task not found"})}
 
         assigned_to = board_task_item.get("assigned_to")
-
-        # ---------------------------------
-        # Verify user is a member of the board
-        # ---------------------------------
-        user_board_resp = table.get_item(Key={"PK": f"USER#{user_id}", "SK": board_sk})
-        if "Item" not in user_board_resp:
-            return {"statusCode": 403, "body": json.dumps({"error": "User is not a member of this board"})}
 
         # ---------------------------------
         # Delete board-centric row

@@ -10,43 +10,44 @@ table = dynamodb.Table(TABLE_NAME)
 def lambda_handler(event, context):
     """
     Lambda to list tasks for a board.
-    Input JSON:
-    {
-        "board_id": "<board-uuid>",
-        "status": "<optional status filter>"
-    }
-    Returns:
-    [
-        {
-            "task_id": "<task-uuid>",
-            "title": "<task title>",
-            "description": "<optional>",
-            "created_at": "<ISO timestamp>",
-            "finish_by": "<ISO timestamp, optional>",
-            "created_by": "<user id>",
-            "assigned_to": "<optional user id>",
-            "status": "<task status>"
-        },
-        ...
-    ]
+    board_id is taken from the route path.
+    Optional "status" filter comes from body.
     """
     try:
-        # Parse input
-        if "body" in event:
-            body = json.loads(event["body"])
-        else:
-            body = event
+        print("EVENT:", json.dumps(event))  # helpful for debugging
 
-        board_id = body.get("board_id")
-        status_filter = body.get("status")
+        # ----------------------------
+        # 1. Get board_id from URL path
+        # ----------------------------
+        board_id = None
+        if event.get("pathParameters"):
+            board_id = event["pathParameters"].get("board_id")
 
         if not board_id:
-            return {"statusCode": 400, "body": json.dumps({"error": "Missing required field: board_id"})}
+            return {
+                "statusCode": 400,
+                "body": json.dumps({"error": "Missing board_id (path parameter)"})
+            }
 
+        # ----------------------------
+        # 2. Parse body for optional fields
+        # ----------------------------
+        if event.get("body"):
+            try:
+                body = json.loads(event["body"])
+            except:
+                body = {}
+        else:
+            body = {}
+
+        status_filter = body.get("status")
+
+        # ----------------------------
+        # 3. Query DynamoDB
+        # ----------------------------
         board_pk = f"BOARD#{board_id}"
         sk_prefix = "TASK#"
 
-        # Query all tasks for the board
         response = table.query(
             KeyConditionExpression="PK = :pk AND begins_with(SK, :sk)",
             ExpressionAttributeValues={
@@ -57,11 +58,15 @@ def lambda_handler(event, context):
 
         items = response.get("Items", [])
 
-        # Optional filter by status
+        # ----------------------------
+        # 4. Optional filter
+        # ----------------------------
         if status_filter:
             items = [item for item in items if item.get("status") == status_filter]
 
-        # Format output
+        # ----------------------------
+        # 5. Format response
+        # ----------------------------
         tasks = []
         for item in items:
             tasks.append({

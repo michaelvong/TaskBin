@@ -1,6 +1,6 @@
 import json
 import boto3
-import time
+from datetime import datetime, timezone
 from botocore.exceptions import ClientError
 
 TABLE_NAME = "TaskBin"
@@ -54,7 +54,6 @@ def lambda_handler(event, context):
 
         # ---------------------------------
         # Verify the board exists
-        # (owner record must exist, but we don't use it)
         # ---------------------------------
         owner_item = table.scan(
             FilterExpression="SK = :sk AND begins_with(PK, :prefix)",
@@ -70,8 +69,6 @@ def lambda_handler(event, context):
                 "body": json.dumps({"error": "Board not found"})
             }
 
-        # We do NOT extract owner_id or do anything with it anymore.
-
         # ---------------------------------
         # Check if user already belongs to the board
         # ---------------------------------
@@ -82,10 +79,13 @@ def lambda_handler(event, context):
                 "body": json.dumps({"error": "User already joined this board"})
             }
 
-        now_ts = int(time.time())
+        # ---------------------------------
+        # Create ISO timestamp
+        # ---------------------------------
+        now = datetime.now(timezone.utc).isoformat()
 
         # ---------------------------------
-        # Add membership rows (USER->BOARD and BOARD->USER)
+        # Add membership rows
         # ---------------------------------
         table.put_item(
             Item={
@@ -94,7 +94,7 @@ def lambda_handler(event, context):
                 "board_id": board_id,
                 "user_id": user_id,
                 "role": "member",
-                "joined_at": now_ts,
+                "joined_at": now,
                 "type": "membership"
             }
         )
@@ -106,7 +106,7 @@ def lambda_handler(event, context):
                 "board_id": board_id,
                 "user_id": user_id,
                 "role": "member",
-                "joined_at": now_ts,
+                "joined_at": now,
                 "type": "board_user"
             }
         )

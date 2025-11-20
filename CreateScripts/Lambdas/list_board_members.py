@@ -10,34 +10,35 @@ table = dynamodb.Table(TABLE_NAME)
 def lambda_handler(event, context):
     """
     Lambda to list all members of a board.
-    Input JSON:
-    {
-        "board_id": "<board-uuid>"
-    }
-    Returns:
-    [
-        {
-            "user_id": "<uuid>",
-            "role": "owner/member",
-            "joined_at": "<timestamp>"  # may be None for owner
-        },
-        ...
-    ]
+    board_id is taken from the route path like:
+    /board/{board_id}/members
     """
     try:
-        # Parse input
-        if "body" in event:
-            body = json.loads(event["body"])
-        else:
-            body = event
+        print("EVENT:", json.dumps(event))  # helpful for debugging
 
-        board_id = body.get("board_id")
+        # --- 1. Get board_id from URL path ---
+        board_id = None
+        if "pathParameters" in event and event["pathParameters"]:
+            board_id = event["pathParameters"].get("board_id")
+
         if not board_id:
-            return {"statusCode": 400, "body": json.dumps({"error": "Missing required field: board_id"})}
+            return {
+                "statusCode": 400,
+                "body": json.dumps({"error": "Missing board_id (path parameter)"})
+            }
+
+        # --- 2. Parse body (if needed later) ---
+        if event.get("body"):
+            try:
+                body = json.loads(event["body"])
+            except:
+                body = {}
+        else:
+            body = {}
 
         board_sk = f"BOARD#{board_id}"
 
-        # Scan for all USER# PKs with this board SK
+        # --- 3. Query DynamoDB for members ---
         response = table.scan(
             FilterExpression="SK = :sk AND begins_with(PK, :prefix)",
             ExpressionAttributeValues={
@@ -53,7 +54,7 @@ def lambda_handler(event, context):
             members.append({
                 "user_id": item.get("user_id"),
                 "role": item.get("role"),
-                "joined_at": item.get("joined_at")  # may be None for owner
+                "joined_at": item.get("joined_at")
             })
 
         return {
