@@ -136,6 +136,27 @@ export default function Dashboard() {
                   state={{ board: b }}
                   className="block rounded-xl border bg-white p-4 hover:shadow-sm transition-shadow"
                 >
+                  <button
+                  onClick={(e) => {
+                    e.preventDefault();   // prevent navigation
+                    e.stopPropagation();
+
+                    // Placeholder permission hook
+                    // TODO: enforce owner-only delete
+
+                    if (confirm("Delete this board? This cannot be undone.")) {
+                      api.deleteBoard(b.id)
+                        .then(() => {
+                          setBoards(prev => prev.filter(x => x.id !== b.id));
+                        })
+                        .catch(err => console.error("Failed to delete board:", err));
+                    }
+                  }}
+                  
+                    className="text-[11px] px-2 py-0.5 rounded-full bg-red-50 text-red-500 hover:bg-red-100 hover:text-red-600 transition font-medium">
+                    Delete
+                  </button>
+
                   <div className="flex items-start justify-between gap-2 mb-2">
                     <div className="font-semibold text-sm line-clamp-1">
                       {b.name}

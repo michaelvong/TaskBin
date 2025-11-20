@@ -2,6 +2,9 @@ const BASE_URL = import.meta.env.VITE_REST_API_URL;
 const TEST_USER_ID = import.meta.env.VITE_TEST_USER_ID || "test-user-id";
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === "true" || !BASE_URL;
 
+// Small helper for realistic mock timing
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 /**
  * In-memory mock database so buttons actually work in mock mode.
  */
@@ -28,7 +31,7 @@ const mockDB = {
         id: "t1",
         title: "Set up backend",
         description: "Wire API Gateway to Lambda + DynamoDB",
-        status: "in-progress",
+        status: "in_progress",
         due: "2025-01-22T00:00:00Z",
         assignee: "mockuser@example.com",
         createdAt: new Date().toISOString(),
@@ -71,6 +74,23 @@ export function useApi() {
   // MOCK MODE: everything happens against mockDB above
   if (USE_MOCK) {
     return {
+      deleteBoard: async (boardId) => {
+      await delay(150);
+      // Remove board object
+      mockDB.boards = mockDB.boards.filter((b) => b.id !== boardId);
+      // Remove tasks for that board
+      delete mockDB.tasksByBoard[boardId];
+      return { message: "Board deleted" };
+    },
+      deleteTask: async (boardId, taskId) => {
+        await delay(150);
+        if (!mockDB.tasksByBoard[boardId]) return;
+        mockDB.tasksByBoard[boardId] = mockDB.tasksByBoard[boardId].filter(
+          (t) => t.id !== taskId
+        );
+        return { message: "Task deleted" };
+      },
+
       listBoards: async () => {
         await new Promise((r) => setTimeout(r, 150));
         return [...mockDB.boards];
@@ -138,6 +158,39 @@ export function useApi() {
 
   // REAL BACKEND MODE
   return {
+    shareBoard: async (boardId, shareWithUserId, role = "editor") => {
+      const body = await jsonRequest(`/boards/${boardId}/share`, {
+        method: "POST",
+        body: JSON.stringify({
+          user_id: TEST_USER_ID,
+          board_id: boardId,
+          share_with_user_id: shareWithUserId,
+          role,
+        }),
+      });
+      return body;
+    },
+
+    unshareBoard: async (boardId, removeUserId) => {
+      const body = await jsonRequest(`/boards/${boardId}/share`, {
+        method: "DELETE",
+        body: JSON.stringify({
+          user_id: TEST_USER_ID,
+          board_id: boardId,
+          remove_user_id: removeUserId,
+        }),
+      });
+      return body;
+    },
+
+    listBoardMembers: async (boardId) => {
+      const body = await jsonRequest(`/boards/${boardId}/members`, {
+        method: "GET",
+      });
+
+      return body.members || [];
+    },
+
     listBoards: async () => {
       const body = await jsonRequest(`/users/${TEST_USER_ID}/boards`, {
         method: "GET",
