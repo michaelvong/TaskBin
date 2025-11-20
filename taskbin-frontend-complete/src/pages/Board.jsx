@@ -4,17 +4,17 @@ import { useEffect, useState } from "react";
 import TaskCard from "../components/TaskCard";
 
 export default function Board() {
-  const { id } = useParams(); // boardId
+  const { id } = useParams();
   const location = useLocation();
   const api = useApi();
 
   const [board, setBoard] = useState(location.state?.board || null);
   const [tasks, setTasks] = useState([]);
+
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskStatus, setNewTaskStatus] = useState("todo");
   const [newTaskAssignee, setNewTaskAssignee] = useState("");
-  const [newTaskDue, setNewTaskDue] = useState(""); // e.g. "2025-11-20"
-
+  const [newTaskDue, setNewTaskDue] = useState("");
 
   useEffect(() => {
     api
@@ -28,15 +28,14 @@ export default function Board() {
     if (!newTaskTitle.trim()) return;
 
     try {
-      const created = await api.createTask(id, {
+      await api.createTask(id, {
         title: newTaskTitle.trim(),
         description: "",
-        status: newTaskStatus,                     // 👈 from state
-        assignee: newTaskAssignee || null,        // 👈 null if empty
+        status: newTaskStatus,
+        assignee: newTaskAssignee || null,
         due: newTaskDue ? new Date(newTaskDue).toISOString() : null,
       });
 
-      // reset form fields
       setNewTaskTitle("");
       setNewTaskStatus("todo");
       setNewTaskAssignee("");
@@ -49,49 +48,89 @@ export default function Board() {
     }
   }
 
-
   return (
-    <div className="p-6">
-      <h1 className="text-3xl font-bold mb-4">
-        {board?.name || "Board"}
-      </h1>
-      <form onSubmit={handleCreateTask}>
-        <input
-          type="text"
-          placeholder="Task title"
-          value={newTaskTitle}
-          onChange={(e) => setNewTaskTitle(e.target.value)}
-        />
+    <div className="max-w-5xl mx-auto p-4 space-y-6">
+      {/* Header */}
+      <header className="mb-2">
+        <h1 className="text-2xl font-bold">{board?.name || "Board"}</h1>
+        {board?.description && (
+          <p className="text-sm text-gray-500 mt-1">{board.description}</p>
+        )}
+      </header>
 
-        <select
-          value={newTaskStatus}
-          onChange={(e) => setNewTaskStatus(e.target.value)}
+      {/* Create task form */}
+      <section className="bg-white rounded-xl shadow p-4 space-y-3">
+        <h2 className="text-lg font-semibold">Create a new task</h2>
+        <form
+          onSubmit={handleCreateTask}
+          className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end"
         >
-          <option value="todo">To Do</option>
-          <option value="in_progress">In Progress</option>
-          <option value="done">Done</option>
-        </select>
+          <div className="flex flex-col">
+            <label className="text-sm font-medium mb-1">Title</label>
+            <input
+              type="text"
+              className="border rounded-lg px-3 py-2 text-sm"
+              placeholder="Task title"
+              value={newTaskTitle}
+              onChange={(e) => setNewTaskTitle(e.target.value)}
+            />
+          </div>
 
-        <input
-          type="text"
-          placeholder="Assignee (email or name)"
-          value={newTaskAssignee}
-          onChange={(e) => setNewTaskAssignee(e.target.value)}
-        />
+          <div className="flex flex-col">
+            <label className="text-sm font-medium mb-1">Status</label>
+            <select
+              className="border rounded-lg px-3 py-2 text-sm"
+              value={newTaskStatus}
+              onChange={(e) => setNewTaskStatus(e.target.value)}
+            >
+              <option value="todo">To Do</option>
+              <option value="in_progress">In Progress</option>
+              <option value="done">Done</option>
+            </select>
+          </div>
 
-        <input
-          type="date"
-          value={newTaskDue}
-          onChange={(e) => setNewTaskDue(e.target.value)}
-        />
+          <div className="flex flex-col">
+            <label className="text-sm font-medium mb-1">Assignee</label>
+            <input
+              type="text"
+              className="border rounded-lg px-3 py-2 text-sm"
+              placeholder="Email or name"
+              value={newTaskAssignee}
+              onChange={(e) => setNewTaskAssignee(e.target.value)}
+            />
+          </div>
 
-        <button type="submit">Create task</button>
-      </form>
-      <div className="grid grid-cols-3 gap-4">
-        {tasks.map((t) => (
-          <TaskCard key={t.id} task={t} />
-        ))}
-      </div>
+          <div className="flex flex-col">
+            <label className="text-sm font-medium mb-1">Due date</label>
+            <input
+              type="date"
+              className="border rounded-lg px-3 py-2 text-sm"
+              value={newTaskDue}
+              onChange={(e) => setNewTaskDue(e.target.value)}
+            />
+          </div>
+
+          <button
+            type="submit"
+            className="mt-1 md:mt-6 inline-flex items-center px-4 py-2 rounded-lg text-sm font-semibold border bg-gray-900 text-white disabled:opacity-60"
+          >
+            Create task
+          </button>
+        </form>
+      </section>
+
+      {/* Task list */}
+      <section>
+        {tasks.length === 0 ? (
+          <p className="text-sm text-gray-500">No tasks yet — create one above.</p>
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {tasks.map((t) => (
+              <TaskCard key={t.id} task={t} />
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   );
 }

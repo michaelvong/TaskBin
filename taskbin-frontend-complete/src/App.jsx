@@ -14,7 +14,7 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Dashboard />} />
-        <Route path="/board/:id" element={<Board />} />
+        <Route path="/boards/:id" element={<Board />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </BrowserRouter>

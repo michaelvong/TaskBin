@@ -147,12 +147,11 @@ export function useApi() {
       return (body.boards || []).map((b) => ({
         id: b.board_id,
         name: b.board_name,
-        role: b.role,
-        description: b.description,
-        joinedAt: b.joined_at,
+        role: b.role ?? "owner",
+        description: b.description ?? "",
+        joinedAt: b.joined_at ?? null,
       }));
     },
-
     createBoard: async (name, description = "") => {
       const body = await jsonRequest(`/boards/create`, {
         method: "POST",
@@ -166,7 +165,11 @@ export function useApi() {
       return {
         id: body.board_id,
         name: body.board_name,
-        description,
+        description: body.description ?? description,
+        // We know the creator is the owner by definition
+        role: "owner",
+        // Backend might or might not send this; fall back to "now"
+        joinedAt: body.joined_at ?? new Date().toISOString(),
       };
     },
 
