@@ -11,6 +11,10 @@ export default function Board() {
   const [board, setBoard] = useState(location.state?.board || null);
   const [tasks, setTasks] = useState([]);
   const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [newTaskStatus, setNewTaskStatus] = useState("todo");
+  const [newTaskAssignee, setNewTaskAssignee] = useState("");
+  const [newTaskDue, setNewTaskDue] = useState(""); // e.g. "2025-11-20"
+
 
   useEffect(() => {
     api
@@ -22,17 +26,22 @@ export default function Board() {
   async function handleCreateTask(e) {
     e.preventDefault();
     if (!newTaskTitle.trim()) return;
+
     try {
       const created = await api.createTask(id, {
         title: newTaskTitle.trim(),
         description: "",
-        due: null,
-        assignee: null,
-        status: "todo",
+        status: newTaskStatus,                     // 👈 from state
+        assignee: newTaskAssignee || null,        // 👈 null if empty
+        due: newTaskDue ? new Date(newTaskDue).toISOString() : null,
       });
-      // In mock mode, createTask returns full object; in real mode it returns ids only.
-      // Easiest is to just refetch tasks after creation:
+
+      // reset form fields
       setNewTaskTitle("");
+      setNewTaskStatus("todo");
+      setNewTaskAssignee("");
+      setNewTaskDue("");
+
       const refreshed = await api.listBoardTasks(id);
       setTasks(refreshed);
     } catch (err) {
@@ -40,24 +49,44 @@ export default function Board() {
     }
   }
 
+
   return (
     <div className="p-6">
       <h1 className="text-3xl font-bold mb-4">
         {board?.name || "Board"}
       </h1>
-
-      <form className="flex gap-2 mb-4" onSubmit={handleCreateTask}>
+      <form onSubmit={handleCreateTask}>
         <input
-          className="border rounded px-3 py-2 flex-1"
-          placeholder="New task title"
+          type="text"
+          placeholder="Task title"
           value={newTaskTitle}
           onChange={(e) => setNewTaskTitle(e.target.value)}
         />
-        <button className="bg-blue-600 text-white px-4 py-2 rounded">
-          Add Task
-        </button>
-      </form>
 
+        <select
+          value={newTaskStatus}
+          onChange={(e) => setNewTaskStatus(e.target.value)}
+        >
+          <option value="todo">To Do</option>
+          <option value="in_progress">In Progress</option>
+          <option value="done">Done</option>
+        </select>
+
+        <input
+          type="text"
+          placeholder="Assignee (email or name)"
+          value={newTaskAssignee}
+          onChange={(e) => setNewTaskAssignee(e.target.value)}
+        />
+
+        <input
+          type="date"
+          value={newTaskDue}
+          onChange={(e) => setNewTaskDue(e.target.value)}
+        />
+
+        <button type="submit">Create task</button>
+      </form>
       <div className="grid grid-cols-3 gap-4">
         {tasks.map((t) => (
           <TaskCard key={t.id} task={t} />
