@@ -4,9 +4,10 @@ import boto3
 from botocore.exceptions import ClientError
 
 # Paths
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))        # DeleteScripts/
-CREATE_DIR = os.path.join(BASE_DIR, "..", "CreateScripts")   # CreateScripts/
-API_ID_FILE = os.path.join(BASE_DIR, "..", "api_id.json")    # JSON file containing API IDs
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))          # TaskBin/DeleteScripts
+PROJECT_ROOT = os.path.abspath(os.path.join(BASE_DIR, ".."))   # TaskBin/
+CREATE_DIR = os.path.join(PROJECT_ROOT, "CreateScripts")       # TaskBin/CreateScripts
+API_ID_FILE = os.path.join(PROJECT_ROOT, "api_id.json")        # TaskBin/api_id.json
 
 # Boto3 client for API Gateway
 apigatewayv2 = boto3.client("apigatewayv2", region_name="us-west-1")
@@ -30,15 +31,17 @@ def delete_all_apis():
             print(f"⚠️ No API ID for {name}, skipping...")
             deletion_results[name] = {"status": "missing-api-id"}
             continue
+
         print(f"🚀 Deleting API '{name}' with ID: {api_id}")
         try:
-            # Correct parameter name for REST APIs
             apigatewayv2.delete_api(ApiId=api_id)
             deletion_results[name] = {"status": "deleted"}
             print(f"✅ API '{name}' deleted successfully")
+
         except ClientError as e:
             print(f"❌ Failed to delete API '{name}': {e}")
             deletion_results[name] = {"status": "error", "error": str(e)}
+
         except Exception as e:
             print(f"❌ Unexpected error deleting API '{name}': {e}")
             deletion_results[name] = {"status": "exception", "error": str(e)}

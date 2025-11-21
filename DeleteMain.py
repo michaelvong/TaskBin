@@ -20,17 +20,17 @@ def main():
     else:
         print("DynamoDB table deletion failed.")
 
-    try:
-        with open("websocket_api_id.txt", "r") as f:
-            api_id_to_delete = f.read().strip()
-    except FileNotFoundError:
-        print("❌ websocket_api_id.txt not found. Cannot delete WebSocket API.")
-        exit(1)
-    deleted = delete_websocket_api(api_id_to_delete)
-    if deleted:
+    #try:
+        #with open("websocket_api_id.txt", "r") as f:
+            #api_id_to_delete = f.read().strip()
+    #except FileNotFoundError:
+        #print("❌ websocket_api_id.txt not found. Cannot delete WebSocket API.")
+        #exit(1)
+    #deleted = delete_websocket_api(api_id_to_delete)
+    #if deleted:
         # Optionally remove the file after successful deletion
-        os.remove("websocket_api_id.txt")
-        print("Deleted WebSocket API ID file.")
+        #os.remove("websocket_api_id.txt")
+        #print("Deleted WebSocket API ID file.")
 
     results = delete_all_apis()
     print("API deletion results:", results)

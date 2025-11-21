@@ -3,7 +3,15 @@ import json
 import os
 from pathlib import Path
 
-ROUTES_DIRECT = os.path.join(os.path.dirname(__file__), "routes")
+# Directory of this script: TaskBin/CreateScripts/
+SCRIPT_DIR = Path(__file__).resolve().parent
+
+# Parent folder: TaskBin/
+TASKBIN_DIR = SCRIPT_DIR.parent
+
+# Routes directory inside TaskBin/
+ROUTES_DIRECT = TASKBIN_DIR / "routes"
+
 
 class APIOrchestrator:
     def __init__(self, api_name="TaskBin_API", region="us-west-1"):
@@ -11,12 +19,15 @@ class APIOrchestrator:
         self.region = region
         self.client = boto3.client('apigatewayv2', region_name=region)
         self.api_id = None
-        self.api_id_file = "api_id.json"
+
+        # Save api_id.json inside TaskBin/
+        self.api_id_file = TASKBIN_DIR / "api_id.json"
 
     def get_or_create_api(self):
         """Get existing API ID or create a new API"""
+
         # Check if API ID exists in file
-        if os.path.exists(self.api_id_file):
+        if self.api_id_file.exists():
             with open(self.api_id_file, 'r') as f:
                 data = json.load(f)
                 self.api_id = data.get('api_id')
@@ -42,7 +53,7 @@ class APIOrchestrator:
 
         self.api_id = response['ApiId']
 
-        # Save API ID to file
+        # Save API ID to TaskBin/api_id.json
         with open(self.api_id_file, 'w') as f:
             json.dump({'api_id': self.api_id}, f, indent=2)
 
@@ -82,7 +93,6 @@ class APIOrchestrator:
     def deploy_api(self, stage_name="prod"):
         """Deploy the API to a stage"""
         try:
-            # Create or update stage
             response = self.client.create_stage(
                 ApiId=self.api_id,
                 StageName=stage_name,
@@ -95,6 +105,7 @@ class APIOrchestrator:
             print(f"Stage {stage_name} already exists")
         except Exception as e:
             print(f"Error deploying API: {str(e)}")
+
 
 if __name__ == "__main__":
     orchestrator = APIOrchestrator()
