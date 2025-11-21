@@ -1,35 +1,27 @@
 from TaskBin.CreateScripts.CreateDB import create_table
 from TaskBin.CreateScripts.CreateUserpool import setup_cognito
 from TaskBin.CreateScripts.CreateLambdas import create_all_lambdas
-from TaskBin.CreateScripts.CreateWebsocket import create_websocket_api
+from CreateScripts.CreateWebsocket import setup_websocket_api
 from TaskBin.CreateScripts.CreateAPI import APIOrchestrator
 import time
 
+
 def main():
-    print("Starting TaskBin AWS setup...")
+    print("=" * 30 + " Starting TaskBin AWS setup... " + "=" * 30)
     setup_cognito()
     # 1. Create DynamoDB Table
-    print("Creating DynamoDB table...")
+    print("=" * 30 + " Creating DynamoDB table..." + "=" * 30)
     create_table()
-    print("Creating Lambdas")
-    ws_arns = create_all_lambdas()
-
-    ws_api = create_websocket_api(
-       ws_arns["connect_lambda_arn"],
-       ws_arns["disconnect_lambda_arn"],
-       ws_arns["sendmessage_lambda_arn"],
-    )
-
-    with open("websocket_api_id.txt", "w") as f:
-        f.write(ws_api["api_id"])
-
-    print(f"WebSocket API ID saved to websocket_api_id.txt for future deletion")
+    print("=" * 30 + " Creating Lambdas" + "=" * 30)
+    create_all_lambdas()
+    print("=" * 30 + " Creating API" + "=" * 30)
     api_orchestrator = APIOrchestrator()
     api_id = api_orchestrator.get_or_create_api()
     api_orchestrator.create_all_routes()
     api_orchestrator.deploy_api()
-
-    print("TaskBin AWS setup complete.")
+    print("=" * 30 + " Creating Websocket API" + "=" * 30)
+    setup_websocket_api()
+    print("=" * 30 + " TaskBin AWS Setup Complete" + "=" * 30)
 
 if __name__ == "__main__":
     main()

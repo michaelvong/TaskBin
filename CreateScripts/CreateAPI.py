@@ -9,8 +9,8 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 # Parent folder: TaskBin/
 TASKBIN_DIR = SCRIPT_DIR.parent
 
-# Routes directory inside TaskBin/
-ROUTES_DIRECT = TASKBIN_DIR / "routes"
+# Routes directory inside TaskBin/CreateScripts/routes
+ROUTES_DIRECT = os.path.join(os.path.dirname(__file__), "routes")
 
 
 class APIOrchestrator:

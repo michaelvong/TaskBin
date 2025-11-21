@@ -98,18 +98,3 @@ def create_all_lambdas():
     with open(ARN_FILE, "w") as f:
         json.dump(lambda_arns, f, indent=4)
     print(f"💾 Saved all Lambda ARNs to {ARN_FILE}")
-
-    # Map main WebSocket Lambdas
-    ws_lambdas = {
-        "connect_lambda_arn": lambda_arns.get(_generate_lambda_name("socket_connect.py")),
-        "disconnect_lambda_arn": lambda_arns.get(_generate_lambda_name("socket_disconnect.py")),
-        "sendmessage_lambda_arn": lambda_arns.get(_generate_lambda_name("socket_sendmsg.py")),
-    }
-
-    # Check for missing ARNs
-    for key, arn in ws_lambdas.items():
-        if not arn:
-            print(f"❌ Warning: {key} not found!")
-
-    print("🔗 WebSocket Lambda ARNs:", ws_lambdas)
-    return ws_lambdas
