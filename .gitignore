@@ -1,2 +1,4 @@
 node_modules/
 .DS_Store
+CreateScripts/__pycache__/
+DeleteScripts/__pycache__/
