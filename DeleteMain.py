@@ -12,7 +12,7 @@ api_file = os.path.join(BASE_DIR, "..", "api_id.json")
 api_file = os.path.abspath(api_file)
 
 def main():
-    delete_user_pool()
+    delete_user_pool("TaskBinUserPool")
     success = delete_table()
     if success:
         print("DynamoDB table deletion complete.")

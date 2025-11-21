@@ -7,7 +7,7 @@ import json
 from botocore.exceptions import ClientError
 
 # --- Configuration ---
-LAMBDA_ROLE_ARN = "arn:aws:iam::508480286587:role/Lambda_TaskBin_Perms"
+LAMBDA_ROLE_ARN = "arn:aws:iam::207214252234:role/Lambda_TaskBin_Perms"
 LAMBDA_RUNTIME = "python3.13"
 LAMBDA_HANDLER = "lambda_function.lambda_handler"
 REGION = "us-west-1"

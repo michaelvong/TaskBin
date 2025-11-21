@@ -16,8 +16,8 @@ export function useApi() {
 
   // 🔥 Control which functions use AWS INDEPENDENTLY
   const FORCE_AWS = {
-    listBoards: false,        // <-- ENABLE AWS listBoards
-    createBoard: false,      // <-- MOCK createBoard
+    listBoards: true,        // <-- ENABLE AWS listBoards
+    createBoard: true,      // <-- MOCK createBoard
     listTasks: false,        // <-- MOCK listTasks
     createTask: false,       // <-- MOCK createTask
     deleteTask: false,       // <-- MOCK deleteTask
@@ -115,7 +115,7 @@ export function useApi() {
         method: "POST",
         body: JSON.stringify({
           user_id: TEST_USER_ID,
-          board_name: name,      // REQUIRED by AWS
+          name: name,      // REQUIRED by AWS
           description: description ?? "",
         }),
       });

@@ -36,6 +36,21 @@ export default function Dashboard() {
     loadBoards();
   }, []);
 
+  useEffect(() => {
+    if (window.location.hash.includes("id_token")) {
+      const params = new URLSearchParams(window.location.hash.substring(1));
+      const idToken = params.get("id_token");
+
+      console.log("🔥 Cognito Token:", idToken);
+
+      localStorage.setItem("idToken", idToken);
+      
+      // Remove token fragment from URL
+      window.location.hash = "";
+    }
+  }, []);
+
+
   // -----------------------------
   // Create Board
   // -----------------------------
@@ -44,10 +59,18 @@ export default function Dashboard() {
     if (!newBoardName.trim()) return;
 
     try {
-      await api.createBoard({
+      console.log("DEBUG: Sending createBoard body:", {
+        user_id: "testuser@example.com",
         name: newBoardName,
         description: newBoardDescription,
       });
+
+      await api.createBoard({
+        user_id: "testuser@example.com",  // hardcoded for now
+        name: newBoardName,
+        description: newBoardDescription,
+      });
+
 
       await loadBoards();
       setNewBoardName("");

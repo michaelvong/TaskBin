@@ -7,112 +7,134 @@ def setup_cognito(
     test_password="Str0ngP@ssw0rd!",
     region="us-west-1",
     wait_retries=5,
-    wait_delay=3
+    wait_delay=3,
+    frontend_url="http://localhost:5173"
 ):
     """
-    Sets up Cognito for TaskBin:
-    1. Creates a user pool
-    2. Waits until the pool is active
-    3. Creates an app client
-    4. Creates a test user
-    5. Confirms the test user
-
-    Returns:
-        user_pool_id, app_client_id
+    Sets up Cognito:
+    - Creates user pool
+    - Creates app client
+    - Creates Hosted UI domain
+    - Links app client to Hosted UI  (**this was missing**)
+    - Enables OAuth2 implicit grant + scopes
+    - Creates test user
     """
-    client = boto3.client("cognito-idp", region_name=region)
 
-    # -----------------------------
-    # Step 1: Create User Pool
-    # -----------------------------
+    cognito = boto3.client("cognito-idp", region_name=region)
+
+    # ---------------------------------------------------------
+    # 1. Create User Pool
+    # ---------------------------------------------------------
+    print("🔧 Creating user pool...")
+    pool_resp = cognito.create_user_pool(
+        PoolName=pool_name,
+        AutoVerifiedAttributes=["email"],
+        UsernameAttributes=["email"],
+        Policies={
+            "PasswordPolicy": {
+                "MinimumLength": 8,
+                "RequireLowercase": True,
+                "RequireUppercase": True,
+                "RequireNumbers": True,
+                "RequireSymbols": True
+            }
+        }
+    )
+    user_pool_id = pool_resp["UserPool"]["Id"]
+    print(f"✔ User Pool ID: {user_pool_id}")
+
+    time.sleep(1)
+
+    # ---------------------------------------------------------
+    # 2. Create App Client (no client secret)
+    # ---------------------------------------------------------
+    print("🔧 Creating app client...")
+    app_client_resp = cognito.create_user_pool_client(
+        UserPoolId=user_pool_id,
+        ClientName="TaskBinAppClient",
+        GenerateSecret=False,
+        ExplicitAuthFlows=["ALLOW_USER_PASSWORD_AUTH", "ALLOW_REFRESH_TOKEN_AUTH"],
+        CallbackURLs=[frontend_url],
+        LogoutURLs=[frontend_url],
+        SupportedIdentityProviders=["COGNITO"],
+        AllowedOAuthFlows=["implicit"],
+        AllowedOAuthScopes=["email", "openid"],
+        AllowedOAuthFlowsUserPoolClient=True
+    )
+    app_client_id = app_client_resp["UserPoolClient"]["ClientId"]
+    print(f"✔ App Client ID: {app_client_id}")
+
+    # IMPORTANT:
+    # Cognito ignores some settings unless we UPDATE the client after creation.
+    time.sleep(1)
+    cognito.update_user_pool_client(
+        UserPoolId=user_pool_id,
+        ClientId=app_client_id,
+        SupportedIdentityProviders=["COGNITO"],
+        CallbackURLs=[frontend_url],
+        LogoutURLs=[frontend_url],
+        AllowedOAuthFlows=["implicit"],
+        AllowedOAuthScopes=["email", "openid"],
+        AllowedOAuthFlowsUserPoolClient=True
+    )
+    print("✔ App Client updated & linked to Hosted UI")
+
+    # ---------------------------------------------------------
+    # 3. Create Hosted UI domain
+    # ---------------------------------------------------------
+    domain_prefix = pool_name.lower()
+    print(f"🔧 Creating domain '{domain_prefix}'...")
     try:
-        response = client.create_user_pool(
-            PoolName=pool_name,
-            AutoVerifiedAttributes=["email"],
-            UsernameAttributes=["email"],
-            Schema=[{"Name": "email", "AttributeDataType": "String", "Required": True}]
+        cognito.create_user_pool_domain(
+            Domain=domain_prefix,
+            UserPoolId=user_pool_id
         )
-        user_pool_id = response['UserPool']['Id']
-        print(f"User Pool '{pool_name}' created with ID: {user_pool_id}")
-    except client.exceptions.ResourceConflictException:
-        # Pool already exists
-        pools = client.list_user_pools(MaxResults=60)['UserPools']
-        matching = [p for p in pools if p['Name'] == pool_name]
-        if not matching:
-            raise Exception(f"User Pool '{pool_name}' exists but could not be retrieved.")
-        user_pool_id = matching[0]['Id']
-        print(f"User Pool '{pool_name}' already exists with ID: {user_pool_id}")
-    except Exception as e:
-        raise Exception(f"Error creating user pool: {e}")
+        print("✔ Hosted UI domain created")
+    except cognito.exceptions.InvalidParameterException as e:
+        if "already exists" in str(e):
+            print("ℹ Domain already exists, continuing...")
+        else:
+            raise
 
-    # -----------------------------
-    # Step 2: Wait for User Pool to be active
-    # -----------------------------
-    for attempt in range(wait_retries):
-        try:
-            client.describe_user_pool(UserPoolId=user_pool_id)
-            print(f"User Pool '{user_pool_id}' is active.")
-            break
-        except client.exceptions.ResourceNotFoundException:
-            print(f"Waiting for User Pool to become active... (Attempt {attempt + 1}/{wait_retries})")
-            time.sleep(wait_delay)
-    else:
-        raise Exception(f"User Pool '{user_pool_id}' did not become active in time.")
+    hosted_ui_url = (
+        f"https://{domain_prefix}.auth.{region}.amazoncognito.com/login"
+        f"?client_id={app_client_id}"
+        f"&response_type=token"
+        f"&scope=email+openid"
+        f"&redirect_uri={frontend_url}"
+    )
 
-    # -----------------------------
-    # Step 3: Create App Client
-    # -----------------------------
-    try:
-        response = client.create_user_pool_client(
-            UserPoolId=user_pool_id,
-            ClientName=f"{pool_name}AppClient",
-            GenerateSecret=False,
-            ExplicitAuthFlows=["ALLOW_USER_PASSWORD_AUTH", "ALLOW_REFRESH_TOKEN_AUTH"]
-        )
-        app_client_id = response['UserPoolClient']['ClientId']
-        print(f"App Client created with ID: {app_client_id}")
-    except client.exceptions.ResourceConflictException:
-        # App client already exists
-        clients = client.list_user_pool_clients(UserPoolId=user_pool_id, MaxResults=60)['UserPoolClients']
-        app_client_id = next((c['ClientId'] for c in clients if c['ClientName'] == f"{pool_name}AppClient"), None)
-        if not app_client_id:
-            raise Exception("App Client exists but could not be retrieved.")
-        print(f"App Client already exists with ID: {app_client_id}")
-    except Exception as e:
-        raise Exception(f"Error creating App Client: {e}")
+    print(f"✔ Hosted UI URL:\n{hosted_ui_url}")
 
-    # -----------------------------
-    # Step 4: Create Test User
-    # -----------------------------
-    try:
-        client.admin_create_user(
-            UserPoolId=user_pool_id,
-            Username=test_username,
-            UserAttributes=[
-                {"Name": "email", "Value": test_username},
-                {"Name": "email_verified", "Value": "True"}
-            ],
-            TemporaryPassword=test_password,
-            MessageAction="SUPPRESS"
-        )
-        print(f"Test user '{test_username}' created.")
-    except client.exceptions.UsernameExistsException:
-        print(f"Test user '{test_username}' already exists.")
-    except Exception as e:
-        raise Exception(f"Error creating test user: {e}")
+    # ---------------------------------------------------------
+    # 4. Create & confirm test user
+    # ---------------------------------------------------------
+    print("🔧 Creating test user...")
+    cognito.admin_create_user(
+        UserPoolId=user_pool_id,
+        Username=test_username,
+        UserAttributes=[{"Name": "email", "Value": test_username}],
+        MessageAction="SUPPRESS"
+    )
 
-    # -----------------------------
-    # Step 5: Confirm Test User
-    # -----------------------------
-    try:
-        client.admin_set_user_password(
-            UserPoolId=user_pool_id,
-            Username=test_username,
-            Password=test_password,
-            Permanent=True
-        )
-        print(f"Test user '{test_username}' confirmed and password set permanently.")
-    except Exception as e:
-        raise Exception(f"Error confirming test user: {e}")
+    cognito.admin_set_user_password(
+        UserPoolId=user_pool_id,
+        Username=test_username,
+        Password=test_password,
+        Permanent=True
+    )
+    print(f"✔ Test user created: {test_username}")
 
-    return user_pool_id, app_client_id
+    # ---------------------------------------------------------
+    # Done
+    # ---------------------------------------------------------
+    return user_pool_id, app_client_id, domain_prefix, hosted_ui_url
+
+
+if __name__ == "__main__":
+    uid, cid, dom, url = setup_cognito()
+    print("\n=== Cognito Setup Complete ===")
+    print("User Pool ID:", uid)
+    print("App Client ID:", cid)
+    print("Domain Prefix:", dom)
+    print("Hosted UI URL:", url)
