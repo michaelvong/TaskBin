@@ -1,187 +1,112 @@
-import { useApi } from "../hooks/useApi";
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
+import { useApi } from "../hooks/useApi";
 
 export default function Dashboard() {
   const api = useApi();
 
   const [boards, setBoards] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [creating, setCreating] = useState(false);
 
   const [newBoardName, setNewBoardName] = useState("");
   const [newBoardDescription, setNewBoardDescription] = useState("");
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadBoards() {
-      try {
-        const data = await api.listBoards();
-        if (!cancelled) {
-          setBoards(data);
-        }
-      } catch (err) {
-        console.error("Failed to load boards:", err);
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    }
-
-    loadBoards();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [api]);
-
-  async function handleCreateBoard(e) {
-    e.preventDefault();
-    const name = newBoardName.trim();
-    if (!name) return;
-
-    setCreating(true);
+  // -----------------------------
+  // Load boards (AWS or MOCK)
+  // -----------------------------
+  async function loadBoards() {
     try {
-      const board = await api.createBoard(name, newBoardDescription.trim());
-      // Optimistically add new board to top of list
-      setBoards((prev) => [board, ...prev]);
+      const result = await api.listBoards();
+
+      // Normalize shape: AWS returns { boards: [...] }
+      const arr = Array.isArray(result)
+        ? result
+        : (result?.boards || []);
+
+      setBoards(arr);
+    } catch (err) {
+      console.error("Failed to load boards:", err);
+      setBoards([]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadBoards();
+  }, []);
+
+  // -----------------------------
+  // Create Board
+  // -----------------------------
+  async function createBoard(e) {
+    e.preventDefault();
+    if (!newBoardName.trim()) return;
+
+    try {
+      await api.createBoard({
+        name: newBoardName,
+        description: newBoardDescription,
+      });
+
+      await loadBoards();
       setNewBoardName("");
       setNewBoardDescription("");
     } catch (err) {
       console.error("Failed to create board:", err);
-      // Optional: show toast / inline error
-    } finally {
-      setCreating(false);
     }
-  }
-
-  function formatJoinedAt(joinedAt) {
-    if (!joinedAt) return null;
-    const d = new Date(joinedAt);
-    if (Number.isNaN(d.getTime())) return null;
-    return d.toLocaleDateString(undefined, {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
   }
 
   return (
     <div className="max-w-5xl mx-auto p-4 space-y-6">
-      <header className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Your boards</h1>
-      </header>
+      <h1 className="text-2xl font-bold">Your Boards</h1>
 
-      {/* Create board form */}
-      <section className="bg-white rounded-xl shadow p-4 space-y-3">
-        <h2 className="text-lg font-semibold">Create a new board</h2>
-        <form
-          onSubmit={handleCreateBoard}
-          className="space-y-3"
-        >
-          <div>
-            <label className="block text-sm font-medium mb-1">
-              Board name
-            </label>
-            <input
-              type="text"
-              className="w-full border rounded-lg px-3 py-2 text-sm"
-              placeholder="e.g. TaskBin roadmap"
-              value={newBoardName}
-              onChange={(e) => setNewBoardName(e.target.value)}
-            />
-          </div>
+      {/* Create Board */}
+      <section className="bg-white shadow rounded-xl p-4 space-y-3">
+        <h2 className="font-semibold text-lg">Create a Board</h2>
 
-          <div>
-            <label className="block text-sm font-medium mb-1">
-              Description <span className="text-gray-400">(optional)</span>
-            </label>
-            <textarea
-              className="w-full border rounded-lg px-3 py-2 text-sm min-h-[60px]"
-              placeholder="Short description of what this board is for"
-              value={newBoardDescription}
-              onChange={(e) => setNewBoardDescription(e.target.value)}
-            />
-          </div>
+        <form onSubmit={createBoard} className="space-y-3">
+          <input
+            className="w-full border rounded-lg px-3 py-2 text-sm"
+            placeholder="Board name"
+            value={newBoardName}
+            onChange={(e) => setNewBoardName(e.target.value)}
+          />
 
-          <button
-            type="submit"
-            disabled={creating || !newBoardName.trim()}
-            className="inline-flex items-center px-4 py-2 rounded-lg text-sm font-semibold border bg-gray-900 text-white disabled:opacity-60"
-          >
-            {creating ? "Creating…" : "Create board"}
+          <textarea
+            className="w-full border rounded-lg px-3 py-2 text-sm"
+            placeholder="Description (optional)"
+            value={newBoardDescription}
+            onChange={(e) => setNewBoardDescription(e.target.value)}
+          />
+
+          <button className="px-4 py-2 bg-gray-900 text-white rounded-lg text-sm">
+            Create
           </button>
         </form>
       </section>
 
-      {/* Boards list */}
+      {/* Boards */}
       <section>
         {loading ? (
-          <div className="text-sm text-gray-500">Loading boards…</div>
-        ) : boards.length === 0 ? (
-          <div className="text-sm text-gray-500">
-            You don&apos;t have any boards yet. Create one above to get
-            started.
-          </div>
+          <div className="text-sm text-gray-500">Loading…</div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {boards.map((b) => {
-              const joined = formatJoinedAt(b.joinedAt);
-              return (
-                <Link
-                  key={b.id}
-                  to={`/boards/${b.id}`}
-                  state={{ board: b }}
-                  className="block rounded-xl border bg-white p-4 hover:shadow-sm transition-shadow"
-                >
-                  <button
-                  onClick={(e) => {
-                    e.preventDefault();   // prevent navigation
-                    e.stopPropagation();
-
-                    // Placeholder permission hook
-                    // TODO: enforce owner-only delete
-
-                    if (confirm("Delete this board? This cannot be undone.")) {
-                      api.deleteBoard(b.id)
-                        .then(() => {
-                          setBoards(prev => prev.filter(x => x.id !== b.id));
-                        })
-                        .catch(err => console.error("Failed to delete board:", err));
-                    }
-                  }}
-                  
-                    className="text-[11px] px-2 py-0.5 rounded-full bg-red-50 text-red-500 hover:bg-red-100 hover:text-red-600 transition font-medium">
-                    Delete
-                  </button>
-
-                  <div className="flex items-start justify-between gap-2 mb-2">
-                    <div className="font-semibold text-sm line-clamp-1">
-                      {b.name}
-                    </div>
-                    {b.role && (
-                      <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-700">
-                        {b.role === "owner" ? "Owner" : "Member"}
-                      </span>
-                    )}
-                  </div>
-
-                  {b.description && (
-                    <p className="text-xs text-gray-600 line-clamp-2 mb-2">
-                      {b.description}
-                    </p>
-                  )}
-
-                  {joined && (
-                    <div className="text-[11px] text-gray-400">
-                      Joined · {joined}
-                    </div>
-                  )}
-                </Link>
-              );
-            })}
+            {boards.map((b) => (
+              <Link
+                key={b.id}
+                to={`/boards/${b.id}`}
+                state={{ board: b }}
+                className="block p-4 border rounded-xl bg-white shadow hover:shadow-md transition"
+              >
+                <div className="font-semibold text-sm">{b.name}</div>
+                {b.description && (
+                  <p className="text-xs text-gray-600 mt-1 line-clamp-2">
+                    {b.description}
+                  </p>
+                )}
+              </Link>
+            ))}
           </div>
         )}
       </section>
