@@ -2,6 +2,7 @@ from TaskBin.DeleteScript.DeleteUserpool import delete_user_pool
 from TaskBin.DeleteScript.DeleteDB import delete_table
 from TaskBin.DeleteScript.DeleteAPI import delete_all_apis
 from TaskBin.DeleteScript.DeleteAmplify import delete_amplify_app
+from TaskBin.DeleteScript.DeleteLambdas import delete_lambdas
 import os
 import time
 
@@ -43,6 +44,8 @@ def main():
     # ------------------------------------------------------------
     # 4. Delete Lambda ARNs file
     # ------------------------------------------------------------
+    print("Deleting Lambdas")
+    delete_lambdas()
     if os.path.exists(lambda_arns_file):
         os.remove(lambda_arns_file)
         print(f"✔ Deleted {lambda_arns_file}")
