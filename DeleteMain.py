@@ -3,6 +3,7 @@ from TaskBin.DeleteScript.DeleteDB import delete_table
 from TaskBin.DeleteScript.DeleteAPI import delete_all_apis
 import time
 import os
+from TaskBin.DeleteScript.DeleteAmplify import delete_amplify_app
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # DeleteScript folder
 create_scripts_dir = os.path.join(BASE_DIR, "CreateScripts")
@@ -28,6 +29,10 @@ def main():
         print(f"✅ Deleted {lambda_arns_file}")
     else:
         print(f"⚠️ File not found, nothing to delete: {lambda_arns_file}")
+    # Configure the app name
+    APP_NAME = "TaskBinFrontend"
 
+    # Call the delete function
+    delete_amplify_app(APP_NAME)
 if __name__ == "__main__":
     main()
