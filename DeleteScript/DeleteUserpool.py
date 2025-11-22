@@ -9,94 +9,78 @@ def delete_user_pool(pool_name="TaskBinUserPool", region="us-west-1"):
     # -----------------------------------------------------
     print("\n🔍 Looking up user pool...")
 
-    try:
-        pools = cognito.list_user_pools(MaxResults=60)["UserPools"]
-        matches = [p for p in pools if p["Name"] == pool_name]
+    pools = cognito.list_user_pools(MaxResults=60)["UserPools"]
+    matches = [p for p in pools if p["Name"] == pool_name]
 
-        if not matches:
-            print("✔ User pool does not exist — nothing to delete.")
-            return
-
-        user_pool_id = matches[0]["Id"]
-        print(f"✔ Found User Pool ID: {user_pool_id}")
-
-    except Exception as e:
-        print("❌ Error listing user pools:", e)
+    if not matches:
+        print("✔ User pool not found — nothing to delete.")
         return
 
-    # -----------------------------------------------------
-    # 2. Delete Hosted UI domain first
-    # -----------------------------------------------------
-    domain_prefix = pool_name.lower()
-    print(f"\n🗑️ Attempting to delete Hosted UI domain: {domain_prefix}")
-
-    try:
-        cognito.delete_user_pool_domain(
-            Domain=domain_prefix,
-            UserPoolId=user_pool_id
-        )
-        print("✔ Domain deletion started")
-    except cognito.exceptions.InvalidParameterException:
-        print("ℹ Domain may not exist or already deleted — continuing...")
-    except Exception as e:
-        print("⚠️ Unexpected error deleting domain:", e)
-
-    time.sleep(1)
+    user_pool_id = matches[0]["Id"]
+    print(f"✔ Found User Pool ID: {user_pool_id}")
 
     # -----------------------------------------------------
-    # 3. Delete ALL App Clients
+    # 2. Get domain + app clients
     # -----------------------------------------------------
-    print("\n🗑️ Deleting app clients...")
+    desc = cognito.describe_user_pool(UserPoolId=user_pool_id)["UserPool"]
+    domain_prefix = desc.get("Domain")  # Full domain prefix
+    print(f"🌐 User Pool Domain: {domain_prefix}")
 
-    try:
-        clients = cognito.list_user_pool_clients(UserPoolId=user_pool_id)["UserPoolClients"]
-        if not clients:
-            print("ℹ No app clients found.")
-        else:
-            for c in clients:
-                cid = c["ClientId"]
-                cname = c.get("ClientName", "(no-name)")
-                print(f"  - Deleting client: {cname} ({cid})")
-                try:
-                    cognito.delete_user_pool_client(
-                        UserPoolId=user_pool_id,
-                        ClientId=cid
-                    )
-                except Exception as e:
-                    print(f"    ⚠️ Error deleting client {cid}: {e}")
-
-    except Exception as e:
-        print("⚠️ Error listing app clients:", e)
-
-    time.sleep(1)
+    clients = cognito.list_user_pool_clients(UserPoolId=user_pool_id, MaxResults=60)["UserPoolClients"]
+    client_ids = [c["ClientId"] for c in clients]
 
     # -----------------------------------------------------
-    # 4. Delete the User Pool (may require retries)
+    # 3. Delete domain first (CRITICAL)
     # -----------------------------------------------------
-    print(f"\n🗑️ Deleting User Pool: {user_pool_id}")
+    if domain_prefix:
+        print(f"🗑️ Deleting Hosted UI domain: {domain_prefix}")
+        try:
+            cognito.delete_user_pool_domain(
+                Domain=domain_prefix,
+                UserPoolId=user_pool_id
+            )
+            print("✔ Hosted UI domain deleted")
+        except Exception as e:
+            print(f"⚠️ Failed to delete domain (may already be deleted): {e}")
 
-    for attempt in range(8):
+        # AWS needs propagation time
+        time.sleep(3)
+
+    # -----------------------------------------------------
+    # 4. Delete all app clients
+    # -----------------------------------------------------
+    print("🗑️ Deleting app clients...")
+    for cid in client_ids:
+        try:
+            cognito.delete_user_pool_client(UserPoolId=user_pool_id, ClientId=cid)
+            print(f"✔ Deleted app client {cid}")
+        except Exception as e:
+            print(f"⚠️ Could not delete client {cid}: {e}")
+
+    # -----------------------------------------------------
+    # 5. Try deleting the user pool
+    # -----------------------------------------------------
+    print("🗑️ Deleting user pool...")
+
+    for attempt in range(5):
         try:
             cognito.delete_user_pool(UserPoolId=user_pool_id)
-            print("✔ User Pool deleted successfully!")
-            return
-        except cognito.exceptions.ResourceNotFoundException:
-            print("✔ User Pool already gone.")
+            print("✔ User pool deleted successfully")
             return
         except cognito.exceptions.InvalidParameterException as e:
-            # Happens if domain still detaching
-            if "domain" in str(e).lower():
-                print("⏳ Cognito still cleaning up domain… retrying...")
-                time.sleep(3)
+            msg = str(e)
+            if "Custom domain" in msg or "domain" in msg:
+                print("⏳ Domain still pending removal. Retrying in 2s...")
+                time.sleep(2)
                 continue
             else:
-                print("❌ Other InvalidParameterException:", e)
+                print("❌ Unexpected InvalidParameterException:", e)
                 return
         except Exception as e:
-            print("⚠️ Unexpected error during deletion:", e)
+            print("⚠️ Unexpected error:", e)
             return
 
-    print("❌ Failed to delete user pool after multiple retries.")
+    print("❌ Failed to delete user pool after retries.")
 
 
 if __name__ == "__main__":

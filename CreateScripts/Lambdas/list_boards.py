@@ -1,53 +1,41 @@
-import json
 import boto3
-import os
+import json
 
 dynamodb = boto3.resource("dynamodb")
-
-# --- DynamoDB single table name ---
-TABLE_NAME = "TaskBin"
-
-table = dynamodb.Table(TABLE_NAME)
+table = dynamodb.Table("TaskBin")
 
 def lambda_handler(event, context):
     user_id = event["pathParameters"]["user_id"]
 
-    # 1) Get all membership rows for this user
+    # Step 1: Fetch USER#email → BOARD#id membership items
+    pk = f"USER#{user_id}"
     response = table.query(
-        KeyConditionExpression=boto3.dynamodb.conditions.Key("PK").eq(f"USER#{user_id}")
+        KeyConditionExpression="PK = :pk",
+        ExpressionAttributeValues={":pk": pk}
     )
-    membership_items = response.get("Items", [])
 
+    items = response.get("Items", [])
     boards = []
 
-    for item in membership_items:
-        if not item["SK"].startswith("BOARD#"):
+    for item in items:
+        if item.get("type") != "membership":
             continue
 
         board_id = item["board_id"]
 
-        # 2) Load metadata for this board
-        metadata_key = {
-            "PK": f"BOARD#{board_id}",
-            "SK": "METADATA"
-        }
-        metadata_item = table.get_item(Key=metadata_key).get("Item", {})
+        # Step 2: Fetch BOARD#id metadata
+        meta_resp = table.get_item(
+            Key={"PK": f"BOARD#{board_id}", "SK": "METADATA"}
+        )
+        metadata = meta_resp.get("Item", {})
 
-        # 3) Merge membership + metadata
         boards.append({
             "id": board_id,
-            "name": (
-                item.get("board_name")
-                or metadata_item.get("board_name")
-                or ""
-            ),
-            "description": (
-                item.get("description")
-                or metadata_item.get("description")
-                or ""
-            ),
-            "role": item.get("role", "owner"),
-            "joinedAt": item.get("joined_at"),
+            "name": metadata.get("board_name", ""),
+            "description": metadata.get("description", ""),
+            "createdAt": metadata.get("created_at", ""),
+            "role": item.get("role", "member"),
+            "joinedAt": item.get("joined_at", "")
         })
 
     return {

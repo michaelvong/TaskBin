@@ -106,6 +106,10 @@ class APIOrchestrator:
         except Exception as e:
             print(f"Error deploying API: {str(e)}")
 
+    def get_api_base_url(self):
+        return f"https://{self.api_id}.execute-api.{self.region}.amazonaws.com/prod"
+
+
 
 if __name__ == "__main__":
     orchestrator = APIOrchestrator()
