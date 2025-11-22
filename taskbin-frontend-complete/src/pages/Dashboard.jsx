@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useApi } from "../hooks/useApi";
+import { jwtDecode } from "jwt-decode";
 
 export default function Dashboard() {
   const api = useApi();
@@ -8,20 +9,46 @@ export default function Dashboard() {
   const [boards, setBoards] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  const [userEmail, setUserEmail] = useState("");
+  const [userName, setUserName] = useState("");
+
   const [newBoardName, setNewBoardName] = useState("");
   const [newBoardDescription, setNewBoardDescription] = useState("");
 
-  // -----------------------------
-  // Load boards (AWS or MOCK)
-  // -----------------------------
+  // -------------------------------------------------------
+  // Parse Cognito Token -> extract email + name
+  // -------------------------------------------------------
+  useEffect(() => {
+    // Handle Hosted UI redirect (id_token in URL hash)
+    if (window.location.hash.includes("id_token")) {
+      const params = new URLSearchParams(window.location.hash.substring(1));
+      const idToken = params.get("id_token");
+
+      localStorage.setItem("idToken", idToken);
+      window.location.hash = "";
+    }
+
+    const token = localStorage.getItem("idToken");
+    if (token) {
+      const decoded = jwtDecode(token);
+
+      setUserEmail(decoded.email);
+      setUserName(decoded.name || "User");
+
+      // Tell useApi which user is currently active
+      api.setUser(decoded.email);
+    }
+  }, []);
+
+  // -------------------------------------------------------
+  // Load boards once user identity is known
+  // -------------------------------------------------------
   async function loadBoards() {
     try {
       const result = await api.listBoards();
-
-      // Normalize shape: AWS returns { boards: [...] }
       const arr = Array.isArray(result)
         ? result
-        : (result?.boards || []);
+        : result?.boards || [];
 
       setBoards(arr);
     } catch (err) {
@@ -33,33 +60,33 @@ export default function Dashboard() {
   }
 
   useEffect(() => {
-    loadBoards();
-  }, []);
+    if (userEmail) loadBoards();
+  }, [userEmail]);
 
-  // -----------------------------
+  // -------------------------------------------------------
   // Create Board
-  // -----------------------------
+  // -------------------------------------------------------
   async function createBoard(e) {
     e.preventDefault();
     if (!newBoardName.trim()) return;
 
-    try {
-      await api.createBoard({
-        name: newBoardName,
-        description: newBoardDescription,
-      });
+    await api.createBoard({
+      name: newBoardName,
+      description: newBoardDescription,
+    });
 
-      await loadBoards();
-      setNewBoardName("");
-      setNewBoardDescription("");
-    } catch (err) {
-      console.error("Failed to create board:", err);
-    }
+    await loadBoards();
+    setNewBoardName("");
+    setNewBoardDescription("");
   }
 
   return (
     <div className="max-w-5xl mx-auto p-4 space-y-6">
-      <h1 className="text-2xl font-bold">Your Boards</h1>
+      {/* User Header */}
+      <div>
+        <h1 className="text-2xl font-bold">Welcome, {userName}</h1>
+        <p className="text-gray-600 text-sm">{userEmail}</p>
+      </div>
 
       {/* Create Board */}
       <section className="bg-white shadow rounded-xl p-4 space-y-3">
@@ -86,7 +113,7 @@ export default function Dashboard() {
         </form>
       </section>
 
-      {/* Boards */}
+      {/* Boards List */}
       <section>
         {loading ? (
           <div className="text-sm text-gray-500">Loading…</div>
@@ -105,6 +132,9 @@ export default function Dashboard() {
                     {b.description}
                   </p>
                 )}
+                <p className="text-[11px] text-gray-400 mt-2">
+                  Role: {b.role}
+                </p>
               </Link>
             ))}
           </div>

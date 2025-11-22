@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
 // ------------------------------------------------------
 // LOCAL MOCK DB
@@ -11,17 +11,25 @@ const mockDB = {
 export function useApi() {
   const USE_MOCK = import.meta.env.VITE_USE_MOCK === "true";
   const BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
-  const TEST_USER_ID =
-    import.meta.env.VITE_TEST_USER_ID || "testuser@example.com";
 
-  // 🔥 Control which functions use AWS INDEPENDENTLY
+  // ------------------------------------------------------
+  // REMOVE TEST USER ENV — rely on real Cognito login
+  // ------------------------------------------------------
+  const [currentUser, setCurrentUser] = useState(null);
+
+  // Expose setUser() for Dashboard to call after decoding id_token
+  function setUser(email) {
+    if (email) setCurrentUser(email);
+  }
+
+  // Your original function-specific AWS override config
   const FORCE_AWS = {
-    listBoards: false,        // <-- ENABLE AWS listBoards
-    createBoard: false,      // <-- MOCK createBoard
-    listTasks: false,        // <-- MOCK listTasks
-    createTask: false,       // <-- MOCK createTask
-    deleteTask: false,       // <-- MOCK deleteTask
-    deleteBoard: false,      // <-- MOCK deleteBoard
+    listBoards: true,
+    createBoard: true,
+    listTasks: false,
+    createTask: false,
+    deleteTask: false,
+    deleteBoard: false,
   };
 
   function delay(ms) {
@@ -29,7 +37,7 @@ export function useApi() {
   }
 
   // ------------------------------------------------------
-  // MOCK IMPLEMENTATION
+  // MOCK IMPLEMENTATION (unchanged)
   // ------------------------------------------------------
   const mock = {
     async listBoards() {
@@ -86,7 +94,7 @@ export function useApi() {
   };
 
   // ------------------------------------------------------
-  // AWS IMPLEMENTATION
+  // AWS IMPLEMENTATION (unchanged except user)
   // ------------------------------------------------------
   async function awsRequest(path, options = {}) {
     const res = await fetch(BASE_URL + path, {
@@ -104,57 +112,56 @@ export function useApi() {
 
   const aws = {
     async listBoards() {
-      const result = await awsRequest(`/users/${TEST_USER_ID}/boards`, {
+      return awsRequest(`/users/${currentUser}/boards`, {
         method: "GET",
-      });
-      return result?.boards || [];
+      }).then((r) => r?.boards || []);
     },
 
     async createBoard({ name, description }) {
-      const result = await awsRequest(`/boards/create`, {
+      return awsRequest(`/boards/create`, {
         method: "POST",
         body: JSON.stringify({
-          user_id: TEST_USER_ID,
-          board_name: name,      // REQUIRED by AWS
+          user_id: currentUser,
+          name,
           description: description ?? "",
         }),
-      });
-      return result?.board || result;
+      }).then((r) => r?.board || r);
     },
 
     async deleteBoard(boardId) {
       return awsRequest(`/boards/${boardId}`, {
         method: "DELETE",
-        body: JSON.stringify({ user_id: TEST_USER_ID }),
+        body: JSON.stringify({ user_id: currentUser }),
       });
     },
 
     async listTasks(boardId) {
-      const result = await awsRequest(`/boards/${boardId}/tasks`, {
+      return awsRequest(`/boards/${boardId}/tasks`, {
         method: "GET",
-      });
-      return result?.tasks || [];
+      }).then((r) => r?.tasks || []);
     },
 
     async createTask(boardId, data) {
       return awsRequest(`/boards/${boardId}/tasks/create`, {
         method: "POST",
-        body: JSON.stringify({ user_id: TEST_USER_ID, ...data }),
+        body: JSON.stringify({ user_id: currentUser, ...data }),
       });
     },
 
     async deleteTask(boardId, taskId) {
       return awsRequest(`/boards/${boardId}/tasks/${taskId}`, {
         method: "DELETE",
-        body: JSON.stringify({ user_id: TEST_USER_ID }),
+        body: JSON.stringify({ user_id: currentUser }),
       });
     },
   };
 
   // ------------------------------------------------------
-  // FINAL API WRAPPER — FUNCTION-BY-FUNCTION SWITCHING
+  // FINAL API WRAPPER (unchanged except user)
   // ------------------------------------------------------
   const api = {
+    setUser,
+
     listBoards: (...args) =>
       !USE_MOCK || FORCE_AWS.listBoards
         ? aws.listBoards(...args)
@@ -186,5 +193,5 @@ export function useApi() {
         : mock.deleteTask(...args),
   };
 
-  return useMemo(() => api, [USE_MOCK, BASE_URL]);
+  return useMemo(() => api, [USE_MOCK, BASE_URL, currentUser]);
 }

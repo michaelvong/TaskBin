@@ -1,112 +1,205 @@
-import { useParams, useLocation, Link } from "react-router-dom";
+import { useEffect, useState } from "react";
 import { useApi } from "../hooks/useApi";
-import { useState, useEffect } from "react";
+import { useLocation, useParams, Link } from "react-router-dom";
 import TaskCard from "../components/TaskCard";
 
 export default function Board() {
-  const { id } = useParams();
-  const { state } = useLocation();
   const api = useApi();
+  const { boardId } = useParams(); // correct param name
+  const location = useLocation();
+  const initialBoard = location.state?.board;
 
-  const [board] = useState(state?.board || null);
+  const [board, setBoard] = useState(initialBoard || null);
   const [tasks, setTasks] = useState([]);
-  const [newTitle, setNewTitle] = useState("");
-  const [newStatus, setNewStatus] = useState("todo");
+
+  // Form state
+  const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [newTaskStatus, setNewTaskStatus] = useState("todo");
+  const [newTaskAssignee, setNewTaskAssignee] = useState("");
+  const [newTaskDue, setNewTaskDue] = useState("");
 
   // -----------------------------
-  // Load tasks (AWS or MOCK)
+  // Load board metadata
+  // -----------------------------
+  async function loadBoard() {
+    if (!board) {
+      // Optional enhancement: fetch metadata from API
+      setBoard({
+        id: boardId,
+        name: "Board",
+        description: "",
+      });
+    }
+  }
+
+  // -----------------------------
+  // Load tasks for this board
   // -----------------------------
   async function loadTasks() {
     try {
-      const result = await api.listTasks(id);
-      const arr = Array.isArray(result)
-        ? result
-        : (result?.tasks || []);
+      const result = await api.listTasks(boardId);
+      const arr = Array.isArray(result) ? result : result?.tasks || [];
       setTasks(arr);
     } catch (err) {
-      console.error("Failed to load tasks:", err);
+      console.error("Error loading tasks:", err);
       setTasks([]);
     }
   }
 
   useEffect(() => {
+    loadBoard();
     loadTasks();
-  }, [id]);
+  }, [boardId]);
 
   // -----------------------------
   // Create task
   // -----------------------------
-  async function createTask(e) {
+  async function handleCreateTask(e) {
     e.preventDefault();
-    if (!newTitle.trim()) return;
+    if (!newTaskTitle.trim()) return;
 
-    await api.createTask(id, {
-      title: newTitle,
-      status: newStatus,
-      description: "",
-      finish_by: null,
-    });
+    try {
+      await api.createTask(boardId, {
+        title: newTaskTitle.trim(),
+        description: "",
+        status: newTaskStatus,
+        assignee: newTaskAssignee || null,
+        due: newTaskDue ? new Date(newTaskDue).toISOString() : null,
+      });
 
-    await loadTasks();
-    setNewTitle("");
-    setNewStatus("todo");
+      // Refresh tasks
+      await loadTasks();
+
+      // Reset form
+      setNewTaskTitle("");
+      setNewTaskStatus("todo");
+      setNewTaskAssignee("");
+      setNewTaskDue("");
+    } catch (err) {
+      console.error("Failed to create task:", err);
+    }
   }
 
   // -----------------------------
   // Delete task
   // -----------------------------
-  async function deleteTask(taskId) {
-    await api.deleteTask(id, taskId);
-    setTasks((prev) => prev.filter((t) => t.id !== taskId));
+  async function handleDeleteTask(taskId) {
+    try {
+      await api.deleteTask(boardId, taskId);
+      setTasks((prev) => prev.filter((t) => t.id !== taskId));
+    } catch (err) {
+      console.error("Failed to delete task:", err);
+    }
   }
+
+  // ----- Task counts for header bar -----
+  const total = tasks.length;
+  const todo = tasks.filter((t) => t.status === "todo").length;
+  const inProgress = tasks.filter((t) => t.status === "in_progress").length;
+  const done = tasks.filter((t) => t.status === "done").length;
 
   return (
     <div className="max-w-5xl mx-auto p-4 space-y-6">
+      {/* Back button */}
+      <Link
+        to="/"
+        className="inline-flex items-center text-sm text-blue-600 hover:underline"
+      >
+        ← Back to boards
+      </Link>
 
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <Link to="/" className="text-blue-600 text-sm hover:underline">
-          ← Back to boards
-        </Link>
+      {/* Board header */}
+      <header className="space-y-1">
         <h1 className="text-2xl font-bold">{board?.name || "Board"}</h1>
-      </div>
+        {board?.description && (
+          <p className="text-sm text-gray-500">{board.description}</p>
+        )}
 
-      {/* Create Task */}
+        <div className="text-xs text-gray-500 flex gap-4 mt-1">
+          <span>Total: {total}</span>
+          <span>To Do: {todo}</span>
+          <span>In Progress: {inProgress}</span>
+          <span>Done: {done}</span>
+        </div>
+      </header>
+
+      {/* Create task form */}
       <section className="bg-white rounded-xl shadow p-4 space-y-3">
-        <h2 className="font-semibold text-lg">Create a Task</h2>
+        <h2 className="text-lg font-semibold">Create a new task</h2>
 
-        <form onSubmit={createTask} className="space-y-3">
-          <input
-            className="w-full border rounded-lg px-3 py-2 text-sm"
-            placeholder="Task title"
-            value={newTitle}
-            onChange={(e) => setNewTitle(e.target.value)}
-          />
+        <form
+          onSubmit={handleCreateTask}
+          className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end"
+        >
+          {/* Title */}
+          <div className="flex flex-col">
+            <label className="text-sm font-medium mb-1">Title</label>
+            <input
+              className="w-full border rounded-lg px-3 py-2 text-sm"
+              value={newTaskTitle}
+              onChange={(e) => setNewTaskTitle(e.target.value)}
+            />
+          </div>
 
-          <select
-            className="w-full border rounded-lg px-3 py-2 text-sm"
-            value={newStatus}
-            onChange={(e) => setNewStatus(e.target.value)}
+          {/* Status */}
+          <div className="flex flex-col">
+            <label className="text-sm font-medium mb-1">Status</label>
+            <select
+              className="w-full border rounded-lg px-3 py-2 text-sm"
+              value={newTaskStatus}
+              onChange={(e) => setNewTaskStatus(e.target.value)}
+            >
+              <option value="todo">To Do</option>
+              <option value="in_progress">In Progress</option>
+              <option value="done">Done</option>
+            </select>
+          </div>
+
+          {/* Assignee */}
+          <div className="flex flex-col">
+            <label className="text-sm font-medium mb-1">Assignee</label>
+            <input
+              className="w-full border rounded-lg px-3 py-2 text-sm"
+              value={newTaskAssignee}
+              onChange={(e) => setNewTaskAssignee(e.target.value)}
+            />
+          </div>
+
+          {/* Due date */}
+          <div className="flex flex-col">
+            <label className="text-sm font-medium mb-1">Due date</label>
+            <input
+              className="w-full border rounded-lg px-3 py-2 text-sm"
+              type="date"
+              value={newTaskDue}
+              onChange={(e) => setNewTaskDue(e.target.value)}
+            />
+          </div>
+
+          {/* Submit */}
+          <button
+            type="submit"
+            className="mt-1 md:mt-6 inline-flex items-center px-4 py-2 rounded-lg text-sm font-semibold border bg-gray-900 text-white"
           >
-            <option value="todo">To Do</option>
-            <option value="in_progress">In Progress</option>
-            <option value="done">Done</option>
-          </select>
-
-          <button className="px-4 py-2 bg-gray-900 text-white rounded-lg text-sm">
-            Create Task
+            Create task
           </button>
         </form>
       </section>
 
-      {/* Tasks */}
+      {/* Task list */}
       <section>
         {tasks.length === 0 ? (
-          <p className="text-sm text-gray-500">No tasks yet. Create one above.</p>
+          <p className="text-sm text-gray-500">
+            No tasks yet — create one above.
+          </p>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {tasks.map((t) => (
-              <TaskCard key={t.id} task={{ ...t, onDelete: deleteTask }} />
+              <TaskCard
+                key={t.id}
+                task={t}
+                onDelete={() => handleDeleteTask(t.id)}
+              />
             ))}
           </div>
         )}
