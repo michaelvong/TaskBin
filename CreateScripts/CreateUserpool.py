@@ -3,7 +3,7 @@ import json
 import os
 import time
 
-def setup_cognito(region="us-west-1"):
+def setup_cognito(frontend_url, region="us-west-1"):
     cognito = boto3.client("cognito-idp", region_name=region)
 
     print("🔧 Creating Cognito User Pool...")
@@ -73,8 +73,6 @@ def setup_cognito(region="us-west-1"):
     )
 
     print(f"✔ Hosted UI Domain: {domain_prefix}.auth.{region}.amazoncognito.com")
-
-    frontend_url = "http://localhost:5173"
 
     # -----------------------------------------------------------
     # IMPORTANT: Cognito often ignores OAuth settings unless updated afterward
