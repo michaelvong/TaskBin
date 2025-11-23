@@ -4,31 +4,32 @@ import { useApi } from "../hooks/useApi";
 import { useAuth } from "../hooks/useAuth";
 
 export default function Dashboard() {
-  //const api = useApi();
-  const { user, loading, signOut } = useAuth();   // ⬅️ MUST expose `loading`
-  const api = useApi(user?.email);  // Pass email directly
+  const { user, loading, signOut } = useAuth();   
+  const api = useApi(user?.email);
+
   const [boards, setBoards] = useState([]);
   const [newBoardName, setNewBoardName] = useState("");
   const [newBoardDescription, setNewBoardDescription] = useState("");
+
+  // Join board modal state
+  const [showJoinModal, setShowJoinModal] = useState(false);
+  const [joinCode, setJoinCode] = useState("");
 
   // --------------------------
   // Load boards AFTER user loads
   // --------------------------
   useEffect(() => {
-    // Cognito still loading user → do nothing
     if (loading) return;
-
-    // No authenticated user → do nothing
-    if (!user?.email) {
-      return;
-    }
-
+    if (!user?.email) return;
 
     api.listBoards()
       .then(setBoards)
       .catch((err) => console.error("ListBoards failed:", err));
-  }, [loading, user?.email]);  // ⬅️ KEY: wait for loading to finish
+  }, [loading, user?.email]);
 
+  // --------------------------
+  // CREATE BOARD
+  // --------------------------
   async function handleCreateBoard(e) {
     e.preventDefault();
     if (!newBoardName.trim()) return;
@@ -45,6 +46,43 @@ export default function Dashboard() {
     setBoards(refreshed);
   }
 
+  // --------------------------
+  // JOIN BOARD VIA CODE
+  // --------------------------
+  async function handleJoinBoard() {
+    const code = joinCode.trim();
+
+    if (!code) {
+      alert("Enter an access code.");
+      return;
+    }
+
+    try {
+      // 🔥 Use your real API wrapper
+      const res = await api.joinBoard(code);
+
+      const boardId = res?.board_id || res?.board?.board_id;
+      if (!boardId) {
+        alert("Invalid access code.");
+        return;
+      }
+
+      // close modal + reset field
+      setShowJoinModal(false);
+      setJoinCode("");
+
+      // refresh boards on dashboard
+      const refreshed = await api.listBoards();
+      setBoards(refreshed);
+
+
+    } catch (err) {
+      console.error("Join board failed:", err);
+      alert("Failed to join board. Check your access code.");
+    }
+  }
+
+
   return (
     <div className="max-w-4xl mx-auto p-4 space-y-6">
 
@@ -55,12 +93,22 @@ export default function Dashboard() {
           <p className="text-sm text-gray-500">Logged in as {user?.email}</p>
         </div>
 
-        <button
-          onClick={signOut}
-          className="px-4 py-2 text-sm font-semibold bg-red-500 text-white rounded-lg shadow hover:bg-red-600"
-        >
-          Sign Out
-        </button>
+        <div className="flex gap-3">
+          {/* JOIN BOARD BUTTON */}
+          <button
+            onClick={() => setShowJoinModal(true)}
+            className="px-4 py-2 text-sm font-semibold bg-blue-600 text-white rounded-lg shadow hover:bg-blue-700"
+          >
+            Join Board
+          </button>
+
+          <button
+            onClick={signOut}
+            className="px-4 py-2 text-sm font-semibold bg-red-500 text-white rounded-lg shadow hover:bg-red-600"
+          >
+            Sign Out
+          </button>
+        </div>
       </header>
 
       {/* CREATE BOARD */}
@@ -115,6 +163,38 @@ export default function Dashboard() {
           </div>
         )}
       </section>
+
+      {/* JOIN BOARD MODAL */}
+      {showJoinModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center">
+          <div className="bg-white p-6 rounded-lg shadow-xl w-80">
+            <h2 className="text-xl font-bold mb-4">Join a Board</h2>
+
+            <input
+              className="border w-full p-2 rounded mb-4"
+              placeholder="Enter access code"
+              value={joinCode}
+              onChange={(e) => setJoinCode(e.target.value)}
+            />
+
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setShowJoinModal(false)}
+                className="px-3 py-1 bg-gray-300 rounded"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleJoinBoard}
+                className="px-3 py-1 bg-blue-600 text-white rounded"
+              >
+                Join
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

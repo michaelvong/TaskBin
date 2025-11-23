@@ -46,6 +46,27 @@ export default function Board() {
   }, [id, user?.email]);
 
   // -------------------------------
+  // GENERATE ACCESS CODE
+  // -------------------------------
+  async function handleGenerateCode() {
+    try {
+      const res = await api.generateCode(id);
+
+      const code = res?.access_code;
+      if (!code) {
+        alert("Failed to generate code — backend returned no access_code");
+        return;
+      }
+      alert(`Access Code for this board: ${code}`);
+
+    } catch (err) {
+      console.error("Error generating code:", err);
+      alert("Failed to generate access code.");
+    }
+  }
+
+
+  // -------------------------------
   // CREATE TASK
   // -------------------------------
   async function handleCreateTask(e) {
@@ -91,7 +112,6 @@ export default function Board() {
     setEditingTask(null);
   }
 
-
   // -------------------------------
   // RENDER
   // -------------------------------
@@ -101,11 +121,21 @@ export default function Board() {
         ← Back
       </Link>
 
-      <header className="space-y-1">
-        <h1 className="text-2xl font-bold">{board?.name || "Board"}</h1>
-        {board?.description && (
-          <p className="text-sm text-gray-500">{board.description}</p>
-        )}
+      <header className="space-y-1 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">{board?.name || "Board"}</h1>
+          {board?.description && (
+            <p className="text-sm text-gray-500">{board.description}</p>
+          )}
+        </div>
+
+        {/* 🔥 Generate Access Code Button */}
+        <button
+          onClick={handleGenerateCode}
+          className="bg-purple-600 text-white px-3 py-2 rounded-lg shadow hover:bg-purple-700 transition"
+        >
+          Generate Access Code
+        </button>
       </header>
 
       {/* CREATE TASK */}
@@ -174,7 +204,7 @@ export default function Board() {
                 key={t.id}
                 task={{
                   ...t,
-                  task_id: t.id,        // 🔥 ADD THIS
+                  task_id: t.id,
                   onDelete: () => handleDeleteTask(t.id),
                   onEdit: () => setEditingTask(t),
                 }}

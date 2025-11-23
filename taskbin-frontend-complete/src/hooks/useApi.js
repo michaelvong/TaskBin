@@ -153,8 +153,32 @@ export function useApi(currentUser) {
           ...updates
         })
       });
-    }
+    },
 
+    // 🔥 NEW — GENERATE BOARD ACCESS CODE
+    // ------------------------------------------------------
+    async generateCode(boardId) {
+      if (!currentUser) throw new Error("No user");
 
+      return awsRequest(`/boards/${boardId}/code`, {
+        method: "POST",
+        body: JSON.stringify({ user_id: currentUser }),
+      });
+    },
+
+    // ------------------------------------------------------
+    // 🔥 NEW — JOIN BOARD VIA ACCESS CODE
+    // ------------------------------------------------------
+    async joinBoard(joinCode) {
+      if (!currentUser) throw new Error("No user");
+
+      return awsRequest(`/boards/join`, {
+        method: "POST",
+        body: JSON.stringify({
+          access_code: joinCode,
+          user_id: currentUser
+        }),
+      });
+    },
   };
 }
