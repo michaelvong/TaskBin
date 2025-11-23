@@ -1,6 +1,20 @@
 export default function TaskCard({ task }) {
-  // Normalize status for styling + display
-  const normalized = task.status?.toLowerCase().replace(/[-\s]/g, "_");
+  console.log("TaskCard debug:", {
+    id: task?.id,
+    title: task?.title,
+    raw_status: task?.task_status,
+    full_task: task
+  });
+
+  const rawStatus =
+    task?.task_status ??
+    task?.full_task?.task_status ??
+    null;
+
+  const normalized = rawStatus
+    ? rawStatus.toLowerCase().replace(/[-\s]/g, "_")
+    : "unknown";
+
 
   const statusColors = {
     todo: "bg-gray-200 text-gray-700",
@@ -10,8 +24,8 @@ export default function TaskCard({ task }) {
 
   const color = statusColors[normalized] || "bg-gray-200 text-gray-700";
 
-  const formattedDue = task.due
-    ? new Date(task.due).toLocaleDateString(undefined, {
+  const formattedDue = task.finish_by
+    ? new Date(task.finish_by).toLocaleDateString(undefined, {
         year: "numeric",
         month: "short",
         day: "numeric",
@@ -20,9 +34,16 @@ export default function TaskCard({ task }) {
 
   return (
     <div className="p-4 bg-white rounded-xl shadow hover:shadow-md transition">
-      {/* Title + Delete + Status */}
       <div className="flex items-center justify-between gap-2 mb-2">
         <h2 className="font-semibold text-sm flex-1 truncate">{task.title}</h2>
+
+        {/* Edit */}
+        <button
+          className="text-blue-600 text-sm"
+          onClick={task.onEdit}
+        >
+          Edit
+        </button>
 
         {/* Delete */}
         <button
@@ -35,9 +56,6 @@ export default function TaskCard({ task }) {
         >
           Delete
         </button>
-
-
-
 
         {/* Status badge */}
         <span
@@ -53,8 +71,8 @@ export default function TaskCard({ task }) {
       )}
 
       {/* Assignee */}
-      {task.assignee && (
-        <p className="text-xs text-gray-600">Assigned: {task.assignee}</p>
+      {task.assignee_id && (
+        <p className="text-xs text-gray-600">Assigned: {task.assignee_id}</p>
       )}
     </div>
   );

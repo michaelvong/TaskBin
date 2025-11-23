@@ -77,7 +77,7 @@ def lambda_handler(event, context):
                 "finish_by": item.get("finish_by"),
                 "created_by": item.get("created_by"),
                 "assigned_to": item.get("assigned_to"),
-                "status": item.get("status")
+                "task_status": item.get("task_status")
             })
 
         return {

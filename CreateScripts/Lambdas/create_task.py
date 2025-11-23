@@ -39,7 +39,7 @@ def lambda_handler(event, context):
         description = body.get("description", "")
         finish_by = body.get("finish_by")
         assigned_to = body.get("assigned_to")
-        status = body.get("status", "todo")
+        task_status = body.get("task_status", "todo")
 
         if not user_id or not title:
             return {
@@ -99,7 +99,7 @@ def lambda_handler(event, context):
             "created_at": created_at,
             "finish_by": finish_by,
             "created_by": user_id,
-            "status": status,
+            "task_status": task_status,
             "assigned_to": assigned_to,
             "type": "task"
         }
@@ -118,7 +118,7 @@ def lambda_handler(event, context):
             "created_at": created_at,
             "finish_by": finish_by,
             "created_by": user_id,
-            "status": status,
+            "task_status": task_status,
             "assigned_to": assigned_to,
             "type": "task_metadata"
         }
@@ -138,7 +138,7 @@ def lambda_handler(event, context):
                 "created_at": created_at,
                 "finish_by": finish_by,
                 "created_by": user_id,
-                "status": status,
+                "task_status": task_status,
                 "type": "user_task"
             }
             table.put_item(Item=user_task_item)

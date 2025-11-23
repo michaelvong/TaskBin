@@ -135,7 +135,26 @@ export function useApi(currentUser) {
 
       // backend returns batches → extract the first
       return r.boards?.[0] || null;
+    },
+
+    async editTask(taskId, updates) {
+      if (!currentUser) throw new Error("No user");
+
+      console.log("editTask request:", {
+        url: `/boards/tasks/${taskId}`,
+        user_id: currentUser,
+        updates
+      });
+
+      return awsRequest(`/boards/tasks/${taskId}`, {
+        method: "POST",
+        body: JSON.stringify({
+          user_id: currentUser,
+          ...updates
+        })
+      });
     }
+
 
   };
 }

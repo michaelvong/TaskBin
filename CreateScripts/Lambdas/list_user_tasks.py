@@ -11,7 +11,7 @@ def lambda_handler(event, context):
     """
     Lambda to list tasks assigned to a user.
     user_id is grabbed from the route: /users/{user_id}/tasks
-    Optional filters: board_id, status
+    Optional filters: board_id, task_status
     Returns:
     [
         {
@@ -23,7 +23,7 @@ def lambda_handler(event, context):
             "finish_by": "<ISO timestamp, optional>",
             "created_by": "<user id>",
             "assigned_to": "<user id>",
-            "status": "<task status>",
+            "task_status": "<task status>",
             "metadata": { ... }  # Task metadata
         },
         ...
@@ -47,7 +47,7 @@ def lambda_handler(event, context):
             body = {}
 
         board_filter = body.get("board_id")
-        status_filter = body.get("status")
+        task_status_filter = body.get("task_status")
 
         user_pk = f"USER#{user_id}"
         sk_prefix = "TASK#"
@@ -68,8 +68,8 @@ def lambda_handler(event, context):
         # Apply optional filters
         if board_filter:
             items = [item for item in items if item.get("board_id") == board_filter]
-        if status_filter:
-            items = [item for item in items if item.get("status") == status_filter]
+        if task_status_filter:
+            items = [item for item in items if item.get("task_status") == task_status_filter]
 
         # -----------------------------
         # Format output and include metadata
@@ -90,7 +90,7 @@ def lambda_handler(event, context):
                 "finish_by": item.get("finish_by"),
                 "created_by": item.get("created_by"),
                 "assigned_to": item.get("assigned_to"),
-                "status": item.get("status"),
+                "task_status": item.get("task_status"),
                 "metadata": metadata_item
             })
 
