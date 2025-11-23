@@ -70,18 +70,16 @@ export function useApi(currentUser) {
     },
 
     async deleteBoard(boardId) {
-      if (USE_MOCK && !FORCE_AWS.deleteBoard) {
-        await delay(150);
-        mockDB.boards = mockDB.boards.filter((b) => b.id !== boardId);
-        delete mockDB.tasks[boardId];
-        return { ok: true };
-      }
       if (!currentUser) throw new Error("No user");
+
       return awsRequest(`/boards/${boardId}`, {
         method: "DELETE",
-        body: JSON.stringify({ user_id: currentUser }),
+        body: JSON.stringify({
+          user_id: currentUser,
+        }),
       });
     },
+
 
     async listTasks(boardId) {
       if (USE_MOCK && !FORCE_AWS.listTasks) {

@@ -68,7 +68,7 @@ export default function Board() {
   }, [id, user?.email]);
 
   // -----------------------------------
-  // WebSocket setup
+  // WebSocket setup + send memberJoined
   // -----------------------------------
   useEffect(() => {
     if (!user?.email || !id) return;
@@ -79,10 +79,13 @@ export default function Board() {
       `&board_id=${encodeURIComponent(id)}`;
 
     const ws = new WebSocket(wsUrl);
-    setSocket(ws);
 
     ws.onmessage = (event) => {
       const data = JSON.parse(event.data);
+      console.log("🔥 WS RECEIVED RAW:", event.data);
+
+      // ⛔ Ignore messages until board + API are fully ready
+      if (!api) return;
 
       if (data.action === "taskUpdated") {
         api.listTasks(id).then((ts) =>
@@ -91,12 +94,17 @@ export default function Board() {
       }
 
       if (data.action === "memberJoined") {
-        api.listBoardMembers(id).then((members) => setMembers(members));
+        api.getBoard(id).then((meta) => {
+          setMembers(meta?.members || []);
+      });
+
       }
     };
-
+    setSocket(ws);
     return () => ws.close();
   }, [user?.email, id]);
+
+
 
   async function handleGenerateCode() {
     try {
@@ -178,6 +186,27 @@ export default function Board() {
     setShowCreateBoardModal(false);
   }
 
+  async function handleDeleteBoard() {
+    if (!confirm("Are you sure you want to delete this board? This cannot be undone.")) {
+      return;
+    }
+
+    try {
+      await api.deleteBoard(id);
+
+      // Refresh board list for sidebar
+      const refreshed = await api.listBoards();
+      setBoards(refreshed);
+
+      // Navigate back to dashboard
+      navigate("/");
+    } catch (err) {
+      console.error("Delete board failed:", err);
+      alert("Failed to delete board. Only the owner can delete it.");
+    }
+  }
+
+
 
   // ------------------------------
   // GROUP TASKS FOR THE 3 COLUMNS
@@ -243,6 +272,15 @@ export default function Board() {
           >
             Generate Access Code
           </button>
+
+          {owner === user?.email && (
+            <button
+              onClick={handleDeleteBoard}
+              className="bg-red-600 text-white px-3 py-2 rounded-lg shadow hover:bg-red-700 transition"
+            >
+              Delete Board
+            </button>
+          )}
         </header>
 
         {/* MEMBERS */}
