@@ -4,9 +4,9 @@ import { useApi } from "../hooks/useApi";
 import { useAuth } from "../hooks/useAuth";
 
 export default function Dashboard() {
-  const api = useApi();
+  //const api = useApi();
   const { user, loading, signOut } = useAuth();   // ⬅️ MUST expose `loading`
-
+  const api = useApi(user?.email);  // Pass email directly
   const [boards, setBoards] = useState([]);
   const [newBoardName, setNewBoardName] = useState("");
   const [newBoardDescription, setNewBoardDescription] = useState("");
@@ -19,10 +19,11 @@ export default function Dashboard() {
     if (loading) return;
 
     // No authenticated user → do nothing
-    if (!user?.email) return;
+    if (!user?.email) {
+      return;
+    }
 
-    // Valid user → register with API and fetch boards
-    api.setUser(user.email);
+
     api.listBoards()
       .then(setBoards)
       .catch((err) => console.error("ListBoards failed:", err));

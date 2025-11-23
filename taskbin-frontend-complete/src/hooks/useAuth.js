@@ -3,11 +3,10 @@ import { jwtDecode } from "jwt-decode";
 
 export function useAuth() {
   const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);  // Add this
 
   useEffect(() => {
-    // -------------------------------
-    // 1. Parse Cognito redirect URL
-    // -------------------------------
+    // Parse Cognito redirect URL
     const hash = window.location.hash;
 
     if (hash.includes("id_token")) {
@@ -16,26 +15,22 @@ export function useAuth() {
 
       if (idToken) {
         localStorage.setItem("id_token", idToken);
-        window.location.hash = ""; // cleanup the URL
+        window.location.hash = "";
       }
     }
 
-    // -------------------------------
-    // 2. Load token from storage
-    // -------------------------------
+    // Load token from storage
     const token = localStorage.getItem("id_token");
 
     if (!token) {
       setUser(null);
+      setLoading(false);  // Done loading, no user
       return;
     }
 
-    // -------------------------------
-    // 3. Decode JWT → user info
-    // -------------------------------
+    // Decode JWT
     try {
       const decoded = jwtDecode(token);
-
       setUser({
         email: decoded.email,
         name: decoded.name || decoded.email,
@@ -46,21 +41,19 @@ export function useAuth() {
       localStorage.removeItem("id_token");
       setUser(null);
     }
+
+    setLoading(false);  // Done loading
   }, []);
 
-  // -------------------------------
-  // 4. Auth API exposed to components
-  // -------------------------------
   return {
     user,
-    signIn: () => {
-      // Not used — Login.jsx handles redirect
-    },
+    loading,  // Expose it
+    signIn: () => {},
     signUp: () => {},
     signOut: () => {
       localStorage.removeItem("id_token");
       setUser(null);
-      window.location.href = "/"; // go back to login
+      window.location.href = "/";
     },
   };
 }
