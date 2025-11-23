@@ -10,9 +10,9 @@ import { toast } from "react-hot-toast";
 
 
 export default function Board() {
-  const { id } = useParams();
+  const {id} = useParams();
   const navigate = useNavigate();  // 🔥 ADDED
-  const { user } = useAuth();
+  const {user} = useAuth();
   const api = useApi(user?.email);
 
   const [board, setBoard] = useState(null);
@@ -21,6 +21,7 @@ export default function Board() {
   const [members, setMembers] = useState([]);
   const [owner, setOwner] = useState(null);
   const [showCreateBoardModal, setShowCreateBoardModal] = useState(false);
+  const [boardDeletedMessage, setBoardDeletedMessage] = useState(null);
 
 
   const [newTaskTitle, setNewTaskTitle] = useState("");
@@ -33,7 +34,7 @@ export default function Board() {
 
   function broadcast(action, payload = {}) {
     if (!socket || socket.readyState !== WebSocket.OPEN) return;
-    socket.send(JSON.stringify({ action, ...payload }));
+    socket.send(JSON.stringify({action, ...payload}));
   }
 
   // -----------------------------------
@@ -60,7 +61,7 @@ export default function Board() {
         setOwner(meta?.owner_id || null);
 
         const ts = await api.listTasks(id);
-        setTasks(ts.map((t) => ({ ...t, id: t.task_id })));
+        setTasks(ts.map((t) => ({...t, id: t.task_id})));
       } catch (err) {
         console.error("Failed loading board or tasks:", err);
       }
@@ -76,9 +77,9 @@ export default function Board() {
     if (!user?.email || !id) return;
 
     const wsUrl =
-      `${import.meta.env.VITE_WEBSOCKET_API_URL}?` +
-      `user_id=${encodeURIComponent(user.email)}` +
-      `&board_id=${encodeURIComponent(id)}`;
+        `${import.meta.env.VITE_WEBSOCKET_API_URL}?` +
+        `user_id=${encodeURIComponent(user.email)}` +
+        `&board_id=${encodeURIComponent(id)}`;
 
     const ws = new WebSocket(wsUrl);
 
@@ -92,21 +93,23 @@ export default function Board() {
 
       if (data.action === "taskUpdated") {
         api.listTasks(id).then((ts) =>
-          setTasks(ts.map((t) => ({ ...t, id: t.task_id })))
+            setTasks(ts.map((t) => ({...t, id: t.task_id})))
         );
+      }
+      if (data.action === "boardDeleted") {
+        // Show popup instead of alert
+        setBoardDeletedMessage("This board has been deleted. Press OK to return to dashboard.");
       }
 
       if (data.action === "memberJoined") {
         api.getBoard(id).then((meta) => {
           setMembers(meta?.members || []);
-      });
-
+        });
       }
     };
     setSocket(ws);
     return () => ws.close();
   }, [user?.email, id]);
-
 
 
   async function handleGenerateCode() {
@@ -150,7 +153,7 @@ export default function Board() {
     setNewTaskDue("");
 
     const refreshed = await api.listTasks(id);
-    setTasks(refreshed.map((t) => ({ ...t, id: t.task_id })));
+    setTasks(refreshed.map((t) => ({...t, id: t.task_id})));
 
     broadcast("taskUpdated", {
       board_id: id,
@@ -176,7 +179,7 @@ export default function Board() {
     await api.editTask(taskId, updates);
 
     const refreshed = await api.listTasks(id);
-    setTasks(refreshed.map((t) => ({ ...t, id: t.task_id })));
+    setTasks(refreshed.map((t) => ({...t, id: t.task_id})));
 
     setEditingTask(null);
 
@@ -220,7 +223,6 @@ export default function Board() {
   }
 
 
-
   // ------------------------------
   // GROUP TASKS FOR THE 3 COLUMNS
   // ------------------------------
@@ -232,254 +234,229 @@ export default function Board() {
 
 
   return (
-    <div className="flex h-screen">
-      {/* -----------------------------
-          LEFT SIDEBAR
-      ----------------------------- */}
-      <div className="w-64 bg-gray-900 text-white p-4 flex flex-col border-r border-gray-700">
-        <h2 className="text-lg mb-4 font-semibold">Your Boards</h2>
-        <div className="flex-1 space-y-2 overflow-y-auto">
-          {boards.map((b) => (
-            <div
-              key={b.id}
-              onClick={() => navigate(`/boards/${b.id}`)}
-              className={`p-2 rounded cursor-pointer ${
-                b.id === id
-                  ? "bg-gray-700"
-                  : "hover:bg-gray-800 transition"
-              }`}
-            >
-              {b.name}
-            </div>
-          ))}
-        </div>
-        {/* Create Board button at bottom */}
-        <button
-          onClick={() => setShowCreateBoardModal(true)}
-          className="mt-4 bg-purple-600 hover:bg-purple-700 text-center py-2 rounded-lg transition"
-        >
-          + Create Board
-        </button>
-      </div>
-
-      {/* -----------------------------
-          RIGHT CONTENT (existing UI)
-      ----------------------------- */}
-      <div className="flex-1 overflow-y-auto p-6 space-y-6">
-
-        <Link to="/" className="text-sm text-blue-600 hover:underline">
-          ← Back
-        </Link>
-
-        <header className="space-y-1 flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold">{board?.name || "Board"}</h1>
-            {board?.description && (
-              <p className="text-sm text-gray-500">{board.description}</p>
-            )}
+      <div className="flex h-screen">
+        {/* -----------------------------
+        LEFT SIDEBAR
+    ----------------------------- */}
+        <div className="w-64 bg-gray-900 text-white p-4 flex flex-col border-r border-gray-700">
+          <h2 className="text-lg mb-4 font-semibold">Your Boards</h2>
+          <div className="flex-1 space-y-2 overflow-y-auto">
+            {boards.map((b) => (
+                <div
+                    key={b.id}
+                    onClick={() => navigate(`/boards/${b.id}`)}
+                    className={`p-2 rounded cursor-pointer ${
+                        b.id === id ? "bg-gray-700" : "hover:bg-gray-800 transition"
+                    }`}
+                >
+                  {b.name}
+                </div>
+            ))}
           </div>
-
           <button
-            onClick={handleGenerateCode}
-            className="bg-purple-600 text-white px-3 py-2 rounded-lg shadow hover:bg-purple-700 transition"
+              onClick={() => setShowCreateBoardModal(true)}
+              className="mt-4 bg-purple-600 hover:bg-purple-700 text-center py-2 rounded-lg transition"
           >
-            Generate Access Code
+            + Create Board
           </button>
+        </div>
 
-          {owner === user?.email && (
+        {/* -----------------------------
+        RIGHT CONTENT
+    ----------------------------- */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          <Link to="/" className="text-sm text-blue-600 hover:underline">
+            ← Back
+          </Link>
+
+          <header className="space-y-1 flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold">{board?.name || "Board"}</h1>
+              {board?.description && (
+                  <p className="text-sm text-gray-500">{board.description}</p>
+              )}
+            </div>
+
             <button
-              onClick={handleDeleteBoard}
-              className="bg-red-600 text-white px-3 py-2 rounded-lg shadow hover:bg-red-700 transition"
+                onClick={handleGenerateCode}
+                className="bg-purple-600 text-white px-3 py-2 rounded-lg shadow hover:bg-purple-700 transition"
             >
-              Delete Board
+              Generate Access Code
             </button>
+
+            {owner === user?.email && (
+                <button
+                    onClick={handleDeleteBoard}
+                    className="bg-red-600 text-white px-3 py-2 rounded-lg shadow hover:bg-red-700 transition"
+                >
+                  Delete Board
+                </button>
+            )}
+          </header>
+
+          {/* MEMBERS SECTION */}
+          <section className="bg-white rounded-xl shadow p-4 space-y-3">
+            <h2 className="text-lg font-semibold">Members</h2>
+            <div>
+              <p className="text-sm font-semibold mb-1">Owner</p>
+              <div className="bg-purple-50 px-3 py-2 rounded-lg flex justify-between">
+                <span>{owner}</span>
+                <span className="px-2 py-1 text-xs bg-purple-200 text-purple-800 rounded-full">
+              owner
+            </span>
+              </div>
+            </div>
+
+            <div>
+              <p className="text-sm font-semibold mt-3 mb-1">Members</p>
+              {members.filter((m) => m.user_id !== owner).length === 0 ? (
+                  <p className="text-sm text-gray-500">No other members.</p>
+              ) : (
+                  <ul className="space-y-1 text-sm">
+                    {members
+                        .filter((m) => m.user_id !== owner)
+                        .map((m) => (
+                            <li
+                                key={m.user_id}
+                                className="flex justify-between bg-gray-50 px-3 py-2 rounded-lg"
+                            >
+                              <span>{m.user_id}</span>
+                              <span className="px-2 py-1 text-xs bg-gray-200 text-gray-600 rounded-full">
+                      member
+                    </span>
+                            </li>
+                        ))}
+                  </ul>
+              )}
+            </div>
+          </section>
+
+          {/* CREATE TASK SECTION */}
+          <section className="bg-white rounded-xl shadow p-4 space-y-3">
+            <h2 className="text-lg font-semibold">Create a new task</h2>
+            <form
+                onSubmit={handleCreateTask}
+                className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end"
+            >
+              <div className="flex flex-col">
+                <label>Title</label>
+                <input
+                    className="border p-2 rounded"
+                    value={newTaskTitle}
+                    onChange={(e) => setNewTaskTitle(e.target.value)}
+                />
+              </div>
+
+              <div className="flex flex-col">
+                <label>Status</label>
+                <select
+                    className="border p-2 rounded"
+                    value={newTaskStatus}
+                    onChange={(e) => setNewTaskStatus(e.target.value)}
+                >
+                  <option value="todo">Todo</option>
+                  <option value="in_progress">In Progress</option>
+                  <option value="done">Done</option>
+                </select>
+              </div>
+
+              <div className="flex flex-col">
+                <label>Assignee</label>
+                <input
+                    className="border p-2 rounded"
+                    value={newTaskAssignee}
+                    onChange={(e) => setNewTaskAssignee(e.target.value)}
+                />
+              </div>
+
+              <div className="flex flex-col">
+                <label>Due date</label>
+                <input
+                    type="date"
+                    className="border p-2 rounded"
+                    value={newTaskDue}
+                    onChange={(e) => setNewTaskDue(e.target.value)}
+                />
+              </div>
+
+              <button className="bg-black text-white px-4 py-2 rounded-lg">
+                Create Task
+              </button>
+            </form>
+          </section>
+
+          {/* TASKS COLUMNS */}
+          <section className="grid gap-6 grid-cols-1 md:grid-cols-3">
+            {["todo", "in_progress", "done"].map((status) => (
+                <div
+                    key={status}
+                    className="bg-white shadow rounded-xl p-4 min-h-[200px] flex flex-col"
+                >
+                  <h3 className="font-semibold mb-3 text-gray-700">
+                    {status === "todo"
+                        ? "Todo"
+                        : status === "in_progress"
+                            ? "In Progress"
+                            : "Done"}
+                  </h3>
+                  <div className="flex-1 space-y-3">
+                    {grouped[status].length === 0 ? (
+                        <p className="text-sm text-gray-400 italic">No tasks.</p>
+                    ) : (
+                        grouped[status].map((t) => (
+                            <TaskCard
+                                key={t.id}
+                                task={{
+                                  ...t,
+                                  task_id: t.id,
+                                  onDelete: () => handleDeleteTask(t.id),
+                                  onEdit: () => setEditingTask(t),
+                                }}
+                            />
+                        ))
+                    )}
+                  </div>
+                </div>
+            ))}
+          </section>
+
+          {/* EDIT TASK MODAL */}
+          {editingTask && (
+              <EditTaskModal
+                  task={editingTask}
+                  onSave={(updates) => handleEditTask(editingTask.id, updates)}
+                  onClose={() => setEditingTask(null)}
+              />
           )}
-        </header>
 
-        {/* MEMBERS */}
-        { /* (unchanged) */ }
-
-        <section className="bg-white rounded-xl shadow p-4 space-y-3">
-          <h2 className="text-lg font-semibold">Members</h2>
-          <div>
-            <p className="text-sm font-semibold mb-1">Owner</p>
-            <div className="bg-purple-50 px-3 py-2 rounded-lg flex justify-between">
-              <span>{owner}</span>
-              <span className="px-2 py-1 text-xs bg-purple-200 text-purple-800 rounded-full">
-                owner
-              </span>
-            </div>
-          </div>
-
-          <div>
-            <p className="text-sm font-semibold mt-3 mb-1">Members</p>
-            {members.filter((m) => m.user_id !== owner).length === 0 ? (
-              <p className="text-sm text-gray-500">No other members.</p>
-            ) : (
-              <ul className="space-y-1 text-sm">
-                {members
-                  .filter((m) => m.user_id !== owner)
-                  .map((m) => (
-                    <li
-                      key={m.user_id}
-                      className="flex justify-between bg-gray-50 px-3 py-2 rounded-lg"
-                    >
-                      <span>{m.user_id}</span>
-                      <span className="px-2 py-1 text-xs bg-gray-200 text-gray-600 rounded-full">
-                        member
-                      </span>
-                    </li>
-                  ))}
-              </ul>
-            )}
-          </div>
-        </section>
-
-        {/* CREATE TASK */}
-        { /* (unchanged) */ }
-
-        <section className="bg-white rounded-xl shadow p-4 space-y-3">
-          <h2 className="text-lg font-semibold">Create a new task</h2>
-          <form
-            onSubmit={handleCreateTask}
-            className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end"
-          >
-            {/* inputs unchanged */}
-            <div className="flex flex-col">
-              <label>Title</label>
-              <input
-                className="border p-2 rounded"
-                value={newTaskTitle}
-                onChange={(e) => setNewTaskTitle(e.target.value)}
+          {/* CREATE BOARD MODAL */}
+          {showCreateBoardModal && (
+              <CreateBoardModal
+                  onCreate={createBoard}
+                  onClose={() => setShowCreateBoardModal(false)}
               />
-            </div>
+          )}
 
-            <div className="flex flex-col">
-              <label>Status</label>
-              <select
-                className="border p-2 rounded"
-                value={newTaskStatus}
-                onChange={(e) => setNewTaskStatus(e.target.value)}
-              >
-                <option value="todo">Todo</option>
-                <option value="in_progress">In Progress</option>
-                <option value="done">Done</option>
-              </select>
-            </div>
-
-            <div className="flex flex-col">
-              <label>Assignee</label>
-              <input
-                className="border p-2 rounded"
-                value={newTaskAssignee}
-                onChange={(e) => setNewTaskAssignee(e.target.value)}
-              />
-            </div>
-
-            <div className="flex flex-col">
-              <label>Due date</label>
-              <input
-                type="date"
-                className="border p-2 rounded"
-                value={newTaskDue}
-                onChange={(e) => setNewTaskDue(e.target.value)}
-              />
-            </div>
-
-            <button className="bg-black text-white px-4 py-2 rounded-lg">
-              Create Task
-            </button>
-          </form>
-        </section>
-
-        {/* -------------------------
-            TASKS: 3-COLUMN LAYOUT
-        ------------------------- */}
-        <section className="grid gap-6 grid-cols-1 md:grid-cols-3">
-
-        {/* TODO COLUMN */}
-        <div className="bg-white shadow rounded-xl p-4 min-h-[200px] flex flex-col">
-          <h3 className="font-semibold mb-3 text-gray-700">Todo</h3>
-          <div className="flex-1 space-y-3">
-            {grouped.todo.length === 0 ? (
-              <p className="text-sm text-gray-400 italic">No tasks.</p>
-            ) : (
-              grouped.todo.map((t) => (
-                <TaskCard
-                  key={t.id}
-                  task={{
-                    ...t,
-                    task_id: t.id,
-                    onDelete: () => handleDeleteTask(t.id),
-                    onEdit: () => setEditingTask(t),
-                  }}
-                />
-              ))
-            )}
-          </div>
+          {/* ---------------------------
+          BOARD DELETED MODAL
+      --------------------------- */}
+          {boardDeletedMessage && (
+              <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
+                <div className="bg-white p-6 rounded shadow-lg max-w-sm text-center">
+                  <p className="mb-4">{boardDeletedMessage}</p>
+                  <button
+                      onClick={() => {
+                        setBoardDeletedMessage(null); // close modal
+                        navigate("/"); // navigate to dashboard
+                      }}
+                      className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
+                  >
+                    OK
+                  </button>
+                </div>
+              </div>
+          )}
         </div>
-
-        {/* IN PROGRESS */}
-        <div className="bg-white shadow rounded-xl p-4 min-h-[200px] flex flex-col">
-          <h3 className="font-semibold mb-3 text-gray-700">In Progress</h3>
-          <div className="flex-1 space-y-3">
-            {grouped.in_progress.length === 0 ? (
-              <p className="text-sm text-gray-400 italic">No tasks.</p>
-            ) : (
-              grouped.in_progress.map((t) => (
-                <TaskCard
-                  key={t.id}
-                  task={{
-                    ...t,
-                    task_id: t.id,
-                    onDelete: () => handleDeleteTask(t.id),
-                    onEdit: () => setEditingTask(t),
-                  }}
-                />
-              ))
-            )}
-          </div>
-        </div>
-
-        {/* DONE */}
-        <div className="bg-white shadow rounded-xl p-4 min-h-[200px] flex flex-col">
-          <h3 className="font-semibold mb-3 text-gray-700">Done</h3>
-          <div className="flex-1 space-y-3">
-            {grouped.done.length === 0 ? (
-              <p className="text-sm text-gray-400 italic">No tasks.</p>
-            ) : (
-              grouped.done.map((t) => (
-                <TaskCard
-                  key={t.id}
-                  task={{
-                    ...t,
-                    task_id: t.id,
-                    onDelete: () => handleDeleteTask(t.id),
-                    onEdit: () => setEditingTask(t),
-                  }}
-                />
-              ))
-            )}
-          </div>
-        </div>
-
-      </section>
-
-        {editingTask && (
-          <EditTaskModal
-            task={editingTask}
-            onSave={(updates) => handleEditTask(editingTask.id, updates)}
-            onClose={() => setEditingTask(null)}
-          />
-        )}
-
-        {showCreateBoardModal && (
-          <CreateBoardModal
-            onCreate={createBoard}
-            onClose={() => setShowCreateBoardModal(false)}
-          />
-        )}
       </div>
-    </div>
   );
 }

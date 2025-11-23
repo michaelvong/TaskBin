@@ -5,89 +5,115 @@ from botocore.exceptions import ClientError
 TABLE_NAME = "TaskBin"
 dynamodb = boto3.resource("dynamodb")
 table = dynamodb.Table(TABLE_NAME)
+lambda_client = boto3.client("lambda")
 
 def lambda_handler(event, context):
     """
     DELETE /boards/{boardId}
-    Expects:
-      - pathParameters.boardId
-      - body.user_id (owner)
+    Deletes board safely with no race conditions.
     """
 
     try:
         # ----------------------------
-        # 1. Extract path parameter
+        # 1. Extract path & body
         # ----------------------------
         path_params = event.get("pathParameters") or {}
         board_id = path_params.get("boardId")
 
-        # ----------------------------
-        # 2. Extract body (for user_id)
-        # ----------------------------
         raw_body = event.get("body")
-        if raw_body:
-            body = json.loads(raw_body)
-        else:
-            body = {}
-
-        user_id = body.get("user_id")
+        body = json.loads(raw_body) if raw_body else {}
+        user_id = str(body.get("user_id", "")).strip().lower()
 
         if not user_id or not board_id:
-            return {
-                "statusCode": 400,
-                "body": json.dumps({"error": "Missing required fields: user_id, board_id"})
-            }
+            return {"statusCode": 400, "body": json.dumps({"error": "Missing required fields"})}
 
-        owner_pk = f"USER#{user_id}"
         board_pk = f"BOARD#{board_id}"
-        board_sk = f"BOARD#{board_id}"
 
         # ----------------------------
-        # 3. Verify board metadata
+        # 2. Fetch board metadata & verify owner
         # ----------------------------
-        response = table.get_item(Key={"PK": board_pk, "SK": "METADATA"})
-        board_item = response.get("Item")
-
+        resp = table.get_item(Key={"PK": board_pk, "SK": "METADATA"})
+        board_item = resp.get("Item")
         if not board_item:
             return {"statusCode": 404, "body": json.dumps({"error": "Board not found"})}
 
-        # Only owner can delete
-        if board_item.get("owner_id") != user_id:
+        owner_id = str(board_item.get("owner_id", "")).strip().lower()
+        if owner_id != user_id:
             return {"statusCode": 403, "body": json.dumps({"error": "Only the owner can delete this board"})}
 
         # ----------------------------
-        # 4. Delete (USER, BOARD) membership entry
+        # 3. Gather all items to delete
         # ----------------------------
-        table.delete_item(Key={"PK": owner_pk, "SK": board_sk})
+        delete_keys = []
 
-        # ----------------------------
-        # 5. Delete all (BOARD, USER) membership entries
-        # ----------------------------
+        # 3a. All tasks + metadata
+        task_resp = table.query(
+            KeyConditionExpression="PK = :pk AND begins_with(SK, :prefix)",
+            ExpressionAttributeValues={":pk": board_pk, ":prefix": "TASK#"}
+        )
+        tasks = task_resp.get("Items", [])
+        for task in tasks:
+            delete_keys.append({"PK": board_pk, "SK": task["SK"]})
+            delete_keys.append({"PK": task["SK"], "SK": "METADATA"})  # task metadata
+
+        # 3b. Access code entries
+        access_resp = table.get_item(Key={"PK": board_pk, "SK": "ACCESS"})
+        access_item = access_resp.get("Item")
+        if access_item and "code" in access_item:
+            access_code = str(access_item["code"]).strip()
+            access_pk = f"ACCESS#{access_code}"
+            access_items = table.query(KeyConditionExpression="PK = :pk", ExpressionAttributeValues={":pk": access_pk}).get("Items", [])
+            for item in access_items:
+                delete_keys.append({"PK": item["PK"], "SK": item["SK"]})
+            delete_keys.append({"PK": board_pk, "SK": "ACCESS"})
+
+        # 3c. Memberships (BOARD->USER)
         member_resp = table.query(
             KeyConditionExpression="PK = :pk AND begins_with(SK, :prefix)",
-            ExpressionAttributeValues={
-                ":pk": board_pk,
-                ":prefix": "USER#"
-            }
+            ExpressionAttributeValues={":pk": board_pk, ":prefix": "USER#"}
         )
+        members = member_resp.get("Items", [])
+        for member in members:
+            delete_keys.append({"PK": member["PK"], "SK": member["SK"]})  # BOARD->USER
 
-        items = member_resp.get("Items", [])
+        # 3d. Memberships (USER->BOARD)
+        for member in members:
+            user_sk = member["SK"]       # USER#uid
+            uid = user_sk.split("#")[1]
+            user_pk = f"USER#{uid}"
+            board_sk = f"BOARD#{board_id}"
+            delete_keys.append({"PK": user_pk, "SK": board_sk})
+        delete_keys.append({"PK": f"USER#{owner_id}", "SK": f"BOARD#{board_id}"})  # owner
 
+        # 3e. Board metadata last
+        delete_keys.append({"PK": board_pk, "SK": "METADATA"})
+
+        # ----------------------------
+        # 4. Execute deletion in batch
+        # ----------------------------
         with table.batch_writer() as batch:
-            for item in items:
-                batch.delete_item(Key={"PK": item["PK"], "SK": item["SK"]})
+            for key in delete_keys:
+                batch.delete_item(Key=key)
 
-        # ----------------------------
-        # 6. Delete metadata row
-        # ----------------------------
-        table.delete_item(Key={"PK": board_pk, "SK": "METADATA"})
+        print(f"🗑 Deleted board {board_id}: {len(tasks)} tasks, {len(members)} memberships, access entries")
 
-        return {
-            "statusCode": 200,
-            "body": json.dumps({
-                "message": f"Board {board_id} and all memberships deleted successfully"
-            })
+        event_payload = {
+            "action": "boardDeleted",
+            "board_id": board_id,
+            "user_id": user_id  # optional: who deleted it
         }
+
+        try:
+            lambda_client.invoke(
+                FunctionName="TaskBin_SocketSendmsg",
+                InvocationType="Event",  # async, won't block deletion
+                Payload=json.dumps(event_payload).encode("utf-8")
+            )
+            print(f"📡 Broadcast invoked for boardDeleted: {board_id}")
+        except Exception as e:
+            print(f"❌ Failed to invoke socket_sendmsg: {e}")
+
+        return {"statusCode": 200, "body": json.dumps({"message": f"Board {board_id} deleted successfully."})}
 
     except ClientError as e:
         print("DynamoDB error:", e)
