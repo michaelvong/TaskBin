@@ -6,11 +6,9 @@ from TaskBin.CreateScripts.CreateAPI import APIOrchestrator
 from TaskBin.CreateScripts.DeployAmplify import deploy_frontend
 import boto3
 import time
+import os
 
 def update_cognito_redirects(user_pool_id, client_id, frontend_url, region="us-west-1"):
-    """
-    After Amplify deploy, update Cognito callback URLs to use the real frontend URL.
-    """
     cognito = boto3.client("cognito-idp", region_name=region)
     print("🔁 Updating Cognito callback URLs with real frontend URL...")
 
@@ -27,22 +25,16 @@ def update_cognito_redirects(user_pool_id, client_id, frontend_url, region="us-w
 
     print("✔ Cognito redirect URLs updated.")
 
-
 def main():
     print("=" * 30 + " Starting TaskBin AWS setup... " + "=" * 30)
 
     # ------------------------------------------------------------
-    # 1. Initial Cognito Setup (temporary localhost redirect)
+    # 1. Initial Cognito Setup (temp localhost redirect)
     # ------------------------------------------------------------
     print("=" * 30 + " Setting up Cognito (Initial) " + "=" * 30)
-
-    # Use temporary localhost redirect until Amplify deploy finishes
     temp_frontend = "http://localhost:5173"
+    user_pool_id, client_id, domain_prefix = setup_cognito()
 
-    user_pool_id, client_id, domain_prefix, hosted_ui_url = setup_cognito(temp_frontend)
-
-    print("\n=== Temporary Cognito Login URL ===")
-    print(hosted_ui_url)
 
     # ------------------------------------------------------------
     # 2. Create DynamoDB Table
@@ -73,18 +65,15 @@ def main():
     setup_websocket_api()
 
     # ------------------------------------------------------------
-    # 6. Deploy Frontend (requires API to exist already)
+    # 6. First Frontend Deploy (just to get URL)
     # ------------------------------------------------------------
-    print("=" * 30 + " Deploying Frontend " + "=" * 30)
+    print("=" * 30 + " Deploying Frontend (initial) " + "=" * 30)
     frontend_url = deploy_frontend()
     print("Amplify frontend URL:", frontend_url)
 
     # ------------------------------------------------------------
-    # 7. Patch Cognito redirect URIs with real Amplify URL
+    # 7. Construct final Hosted UI Login URL
     # ------------------------------------------------------------
-    update_cognito_redirects(user_pool_id, client_id, frontend_url)
-
-    # Build updated hosted UI URL
     region = "us-west-1"
     hosted_ui_url = (
         f"https://{domain_prefix}.auth.{region}.amazoncognito.com/login"
@@ -94,7 +83,19 @@ def main():
         f"&redirect_uri={frontend_url}"
     )
 
-    print("=" * 30 + " TaskBin AWS Setup Complete" + "=" * 30)
+    # ------------------------------------------------------------
+    # 8. Update Cognito redirect URIs to real frontend
+    # ------------------------------------------------------------
+    update_cognito_redirects(user_pool_id, client_id, frontend_url)
+
+    print("⏳ Waiting for Amplify to finish initial deployment...")
+    time.sleep(10)
+
+    # ------------------------------------------------------------
+    # 9. Re-deploy Frontend with correct Hosted UI login URL in .env
+    # ------------------------------------------------------------
+    print("=" * 30 + " Re-deploying Frontend (with login URL) " + "=" * 30)
+    deploy_frontend(hosted_ui_url=hosted_ui_url)
 
     # ------------------------------------------------------------
     # FINAL DEBUG SUMMARY
@@ -103,7 +104,6 @@ def main():
     print(f"API Endpoint: {api_base_url}")
     print(f"Hosted UI Login URL:\n{hosted_ui_url}")
     print("===========================================================\n")
-
 
 if __name__ == "__main__":
     main()

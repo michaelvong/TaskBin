@@ -26,10 +26,10 @@ export function useApi() {
   const FORCE_AWS = {
     listBoards: true,
     createBoard: true,
-    listTasks: false,
-    createTask: false,
-    deleteTask: false,
-    deleteBoard: false,
+    listTasks: true,
+    createTask: true,
+    deleteTask: true,
+    deleteBoard: true,
   };
 
   function delay(ms) {
@@ -110,51 +110,49 @@ export function useApi() {
     return res.json();
   }
 
-  const aws = {
-    async listBoards() {
-      return awsRequest(`/users/${currentUser}/boards`, {
-        method: "GET",
-      }).then((r) => r?.boards || []);
-    },
+const aws = {
+  async listBoards() {
+    if (!currentUser) return [];
+    return awsRequest(`/users/${currentUser}/boards`).then(r => r.boards || []);
+  },
 
-    async createBoard({ name, description }) {
-      return awsRequest(`/boards/create`, {
-        method: "POST",
-        body: JSON.stringify({
-          user_id: currentUser,
-          name,
-          description: description ?? "",
-        }),
-      }).then((r) => r?.board || r);
-    },
+  async createBoard({ name, description }) {
+    if (!currentUser) throw new Error("No user");
+    return awsRequest(`/boards/create`, {
+      method: "POST",
+      body: JSON.stringify({ user_id: currentUser, name, description })
+    }).then(r => r.board || r);
+  },
 
-    async deleteBoard(boardId) {
-      return awsRequest(`/boards/${boardId}`, {
-        method: "DELETE",
-        body: JSON.stringify({ user_id: currentUser }),
-      });
-    },
+  async deleteBoard(boardId) {
+    if (!currentUser) throw new Error("No user");
+    return awsRequest(`/boards/${boardId}`, {
+      method: "DELETE",
+      body: JSON.stringify({ user_id: currentUser })
+    });
+  },
 
-    async listTasks(boardId) {
-      return awsRequest(`/boards/${boardId}/tasks`, {
-        method: "GET",
-      }).then((r) => r?.tasks || []);
-    },
+  async listTasks(boardId) {
+    return awsRequest(`/boards/${boardId}/tasks`).then(r => r.tasks || []);
+  },
 
-    async createTask(boardId, data) {
-      return awsRequest(`/boards/${boardId}/tasks/create`, {
-        method: "POST",
-        body: JSON.stringify({ user_id: currentUser, ...data }),
-      });
-    },
+  async createTask(boardId, data) {
+    if (!currentUser) throw new Error("No user");
+    return awsRequest(`/boards/${boardId}/tasks/create`, {
+      method: "POST",
+      body: JSON.stringify({ user_id: currentUser, ...data })
+    });
+  },
 
-    async deleteTask(boardId, taskId) {
-      return awsRequest(`/boards/${boardId}/tasks/${taskId}`, {
-        method: "DELETE",
-        body: JSON.stringify({ user_id: currentUser }),
-      });
-    },
-  };
+  async deleteTask(boardId, taskId) {
+    if (!currentUser) throw new Error("No user");
+    return awsRequest(`/boards/${boardId}/tasks/${taskId}`, {
+      method: "DELETE",
+      body: JSON.stringify({ user_id: currentUser })
+    });
+  },
+};
+
 
   // ------------------------------------------------------
   // FINAL API WRAPPER (unchanged except user)

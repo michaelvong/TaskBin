@@ -6,6 +6,8 @@ import requests
 import sys
 import shutil
 import json
+import time
+
 
 # -----------------------------
 # Helper functions
@@ -75,13 +77,14 @@ def get_frontend_url_temp(app_id, branch_name):
 # -----------------------------
 # Main deploy function
 # -----------------------------
-
 def deploy_frontend(
         frontend_dir=None,
         app_name="TaskBinFrontend",
         branch_name="main",
-        region="us-west-1"
+        region="us-west-1",
+        hosted_ui_url=None
 ):
+
     # Detect Node + npm
     node_path, npm_path = detect_node_and_npm()
 
@@ -111,11 +114,16 @@ def deploy_frontend(
     # Assume stage is 'dev' for WebSocket
     stage = "dev"
 
+    if not hosted_ui_url:
+        print("⚠️ Warning: hosted_ui_url not provided, skipping VITE_COGNITO_LOGIN_URL")
+        hosted_ui_url = ""
+
+
     env_content = f"""
-VITE_API_BASE_URL=https://{api_id}.execute-api.{region}.amazonaws.com/prod
-VITE_WEBSOCKET_API_URL=wss://{websocket_api_id}.execute-api.{region}.amazonaws.com/{stage}
-VITE_TEST_USER_ID=your-test-user-id
-"""
+    VITE_API_BASE_URL=https://{api_id}.execute-api.{region}.amazonaws.com/prod
+    VITE_WEBSOCKET_API_URL=wss://{websocket_api_id}.execute-api.{region}.amazonaws.com/{stage}
+    VITE_COGNITO_LOGIN_URL={hosted_ui_url}
+    """
 
     env_file = os.path.join(frontend_dir, ".env.production")
     with open(env_file, "w") as f:
