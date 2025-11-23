@@ -119,11 +119,11 @@ def deploy_frontend(
         hosted_ui_url = ""
 
 
-    env_content = f"""
-    VITE_API_BASE_URL=https://{api_id}.execute-api.{region}.amazonaws.com/prod
-    VITE_WEBSOCKET_API_URL=wss://{websocket_api_id}.execute-api.{region}.amazonaws.com/{stage}
-    VITE_COGNITO_LOGIN_URL={hosted_ui_url}
-    """
+    env_content = (
+    f"VITE_API_BASE_URL=https://{api_id}.execute-api.{region}.amazonaws.com/prod\n"
+    f"VITE_WEBSOCKET_API_URL=wss://{websocket_api_id}.execute-api.{region}.amazonaws.com/{stage}\n"
+    f"VITE_COGNITO_LOGIN_URL={hosted_ui_url}\n"
+    )
 
     env_file = os.path.join(frontend_dir, ".env.production")
     with open(env_file, "w") as f:
@@ -179,6 +179,26 @@ def deploy_frontend(
 
     branch_name_actual = branch["branchName"]
     print(f"Branch ready: {branch_name_actual}")
+
+    print("Configuring Amplify SPA rewrite rules...")
+    REWRITE_RULES = [
+        {
+            "source": "/assets/<*>",
+            "target": "/assets/<*>",
+            "status": "200"
+        },
+        {
+            "source": "/<*>",
+            "target": "/index.html",
+            "status": "200"
+        }
+    ]
+    amplify.update_app(
+        appId=app_id,
+        customRules=REWRITE_RULES
+    )
+    print("✔ Amplify rewrite rules configured")
+
 
     # Step 5: Prepare fileMap
     print("Building MD5 fileMap from dist/ folder...")
