@@ -71,8 +71,8 @@ export default function TaskCard({ task }) {
       )}
 
       {/* Assignee */}
-      {task.assignee_id && (
-        <p className="text-xs text-gray-600">Assigned: {task.assignee_id}</p>
+      {task.assigned_to && (
+        <p className="text-xs text-gray-600">Assigned: {task.assigned_to}</p>
       )}
     </div>
   );

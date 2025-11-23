@@ -36,7 +36,7 @@ def lambda_handler(event, context):
                 "title": item.get("title", ""),
                 "description": item.get("description", ""),
                 "board_id": item.get("board_id", ""),
-                "assignee_id": item.get("assignee_id", ""),
+                "assigned_to": item.get("assigned_to", ""),
                 "status": item.get("status", ""),
                 "created_at": item.get("created_at", "")
             }

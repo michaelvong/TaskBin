@@ -44,6 +44,7 @@ export default function Dashboard() {
 
     const refreshed = await api.listBoards();
     setBoards(refreshed);
+    toast.success("Board created!");
   }
 
   // --------------------------
@@ -53,7 +54,8 @@ export default function Dashboard() {
     const code = joinCode.trim();
 
     if (!code) {
-      alert("Enter an access code.");
+      // alert("Enter an access code.");
+      toast("Enter an access code.")
       return;
     }
 
@@ -63,7 +65,8 @@ export default function Dashboard() {
 
       const boardId = res?.board_id || res?.board?.board_id;
       if (!boardId) {
-        alert("Invalid access code.");
+        //alert("Invalid access code.");
+        toast("Invalid access code.")
         return;
       }
 
@@ -78,7 +81,8 @@ export default function Dashboard() {
 
     } catch (err) {
       console.error("Join board failed:", err);
-      alert("Failed to join board. Check your access code.");
+      //alert("Failed to join board. Check your access code.");
+      toast("Failed to join board. Check your access code.")
     }
   }
 

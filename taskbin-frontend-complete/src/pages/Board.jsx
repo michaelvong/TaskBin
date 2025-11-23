@@ -5,6 +5,8 @@ import { useAuth } from "../hooks/useAuth";
 import TaskCard from "../components/TaskCard";
 import EditTaskModal from "../components/EditTaskModal";
 import CreateBoardModal from "../components/CreateBoardModal";
+import { toast } from "react-hot-toast";
+
 
 
 export default function Board() {
@@ -82,7 +84,8 @@ export default function Board() {
 
     ws.onmessage = (event) => {
       const data = JSON.parse(event.data);
-      console.log("🔥 WS RECEIVED RAW:", event.data);
+      // Debug
+      // console.log("🔥 WS RECEIVED RAW:", event.data);
 
       // ⛔ Ignore messages until board + API are fully ready
       if (!api) return;
@@ -112,14 +115,20 @@ export default function Board() {
       const code = res?.access_code;
 
       if (!code) {
-        alert("Failed to generate code — backend returned no access_code");
+        //alert("Failed to generate code — backend returned no access_code");
+        toast("Failed to generate code — backend returned no access_code")
         return;
       }
 
       alert(`Access Code for this board: ${code}`);
+      toast(`Access Code: ${code}`, {
+        icon: "🔑",
+      });
+
     } catch (err) {
       console.error("Error generating code:", err);
-      alert("Failed to generate access code.");
+      // alert("Failed to generate access code.");
+      toast("Failed to generate access code.");
     }
   }
 
@@ -131,7 +140,7 @@ export default function Board() {
       title: newTaskTitle.trim(),
       description: "",
       task_status: newTaskStatus,
-      assignee_id: newTaskAssignee || null,
+      assigned_to: newTaskAssignee || null,
       finish_by: newTaskDue ? new Date(newTaskDue).toISOString() : null,
     });
 
@@ -148,6 +157,7 @@ export default function Board() {
       user_id: user.email,
       message: "created",
     });
+    toast.success("Task created!");
   }
 
   async function handleDeleteTask(taskId) {
@@ -159,6 +169,7 @@ export default function Board() {
       user_id: user.email,
       message: "deleted",
     });
+    toast.success("Task deleted!");
   }
 
   async function handleEditTask(taskId, updates) {
@@ -174,6 +185,7 @@ export default function Board() {
       user_id: user.email,
       message: "updated",
     });
+    toast.success("Task updated!");
   }
 
   async function createBoard(name, description) {
@@ -200,6 +212,7 @@ export default function Board() {
 
       // Navigate back to dashboard
       navigate("/");
+      toast.success("Deleted board!")
     } catch (err) {
       console.error("Delete board failed:", err);
       alert("Failed to delete board. Only the owner can delete it.");

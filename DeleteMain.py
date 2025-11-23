@@ -44,13 +44,13 @@ def main():
     # ------------------------------------------------------------
     # 4. Delete Lambda ARNs file
     # ------------------------------------------------------------
-    # print("Deleting Lambdas")
-    # delete_lambdas()
-    # if os.path.exists(lambda_arns_file):
-    #     os.remove(lambda_arns_file)
-    #     print(f"✔ Deleted {lambda_arns_file}")
-    # else:
-    #     print(f"⚠️ File not found, nothing to delete: {lambda_arns_file}")
+    print("Deleting Lambdas")
+    delete_lambdas()
+    if os.path.exists(lambda_arns_file):
+        os.remove(lambda_arns_file)
+        print(f"✔ Deleted {lambda_arns_file}")
+    else:
+        print(f"⚠️ File not found, nothing to delete: {lambda_arns_file}")
 
 if __name__ == "__main__":
     main()

@@ -11,7 +11,7 @@ export default function EditTaskModal({ task, onSave, onClose }) {
 
     setTitle(task.title || "");
     setStatus(task.task_status || "todo");
-    setAssignee(task.assignee_id || "");
+    setAssignee(task.assigned_to || "");
     setFinishBy(task.finish_by ? task.finish_by.substring(0, 10) : "");
   }, [task]);
 
