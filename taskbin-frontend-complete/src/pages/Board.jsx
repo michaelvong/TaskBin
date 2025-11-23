@@ -1,30 +1,35 @@
-// src/pages/Board.jsx
 import { Link, useParams } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { useApi } from "../hooks/useApi";
-import TaskCard from "../components/TaskCard";
 import { useAuth } from "../hooks/useAuth";
+import TaskCard from "../components/TaskCard";
 
 export default function Board() {
   const { id } = useParams();
-  const api = useApi();
   const { user } = useAuth();
+  const api = useApi(user?.email);
 
-  const [tasks, setTasks] = useState([]);
   const [board, setBoard] = useState(null);
+  const [tasks, setTasks] = useState([]);
 
-  // New task inputs
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskStatus, setNewTaskStatus] = useState("todo");
   const [newTaskAssignee, setNewTaskAssignee] = useState("");
   const [newTaskDue, setNewTaskDue] = useState("");
 
   useEffect(() => {
-    if (!user) return;
+    if (!user?.email) return;
 
     api.getBoard(id).then(setBoard).catch(console.error);
-    api.listBoardTasks(id).then(setTasks).catch(console.error);
-  }, [id, user]);
+    api.listTasks(id).then((ts) => {
+      // normalize IDs (task_id → id)
+      const normalized = ts.map((t) => ({
+        ...t,
+        id: t.id || t.task_id
+      }));
+      setTasks(normalized);
+    });
+  }, [id, user?.email]);
 
   async function handleCreateTask(e) {
     e.preventDefault();
@@ -34,8 +39,8 @@ export default function Board() {
       title: newTaskTitle.trim(),
       description: "",
       status: newTaskStatus,
-      assignee: newTaskAssignee || null,
-      due: newTaskDue ? new Date(newTaskDue).toISOString() : null,
+      assignee_id: newTaskAssignee || null,
+      finish_by: newTaskDue ? new Date(newTaskDue).toISOString() : null,
     });
 
     setNewTaskTitle("");
@@ -43,46 +48,27 @@ export default function Board() {
     setNewTaskAssignee("");
     setNewTaskDue("");
 
-    const refreshed = await api.listBoardTasks(id);
-    setTasks(refreshed);
+    const refreshed = await api.listTasks(id);
+    setTasks(refreshed.map((t) => ({ ...t, id: t.id || t.task_id })));
   }
 
   async function handleDeleteTask(taskId) {
     await api.deleteTask(id, taskId);
-    setTasks((prev) => prev.filter((t) => t.id !== taskId));
+    setTasks((prev) => prev.filter((t) => (t.id || t.task_id) !== taskId));
   }
-
-  const total = tasks.length;
-  const todo = tasks.filter((t) => t.status === "todo").length;
-  const inProgress = tasks.filter((t) => t.status === "in_progress").length;
-  const done = tasks.filter((t) => t.status === "done").length;
 
   return (
     <div className="max-w-5xl mx-auto p-4 space-y-6">
-      {/* BACK BUTTON */}
-      <Link
-        to="/"
-        className="inline-flex items-center text-sm text-blue-600 hover:underline"
-      >
-        ← Back to boards
-      </Link>
+      <Link to="/" className="text-sm text-blue-600 hover:underline">← Back</Link>
 
-      {/* HEADER */}
       <header className="space-y-1">
         <h1 className="text-2xl font-bold">{board?.name || "Board"}</h1>
         {board?.description && (
           <p className="text-sm text-gray-500">{board.description}</p>
         )}
-
-        <div className="text-xs text-gray-500 flex gap-4 mt-1">
-          <span>Total: {total}</span>
-          <span>To Do: {todo}</span>
-          <span>In Progress: {inProgress}</span>
-          <span>Done: {done}</span>
-        </div>
       </header>
 
-      {/* CREATE TASK */}
+      {/* CREATE TASK FORM */}
       <section className="bg-white rounded-xl shadow p-4 space-y-3">
         <h2 className="text-lg font-semibold">Create a new task</h2>
 
@@ -90,21 +76,17 @@ export default function Board() {
           onSubmit={handleCreateTask}
           className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end"
         >
-          {/* Title */}
           <div className="flex flex-col">
-            <label className="text-sm font-medium mb-1">Title</label>
-            <input
-              className="border p-2 rounded"
+            <label>Title</label>
+            <input className="border p-2 rounded"
               value={newTaskTitle}
               onChange={(e) => setNewTaskTitle(e.target.value)}
             />
           </div>
 
-          {/* Status */}
           <div className="flex flex-col">
-            <label className="text-sm font-medium mb-1">Status</label>
-            <select
-              className="border p-2 rounded"
+            <label>Status</label>
+            <select className="border p-2 rounded"
               value={newTaskStatus}
               onChange={(e) => setNewTaskStatus(e.target.value)}
             >
@@ -114,44 +96,38 @@ export default function Board() {
             </select>
           </div>
 
-          {/* Assignee */}
           <div className="flex flex-col">
-            <label className="text-sm font-medium mb-1">Assignee</label>
-            <input
-              className="border p-2 rounded"
+            <label>Assignee</label>
+            <input className="border p-2 rounded"
               value={newTaskAssignee}
               onChange={(e) => setNewTaskAssignee(e.target.value)}
             />
           </div>
 
-          {/* Due */}
           <div className="flex flex-col">
-            <label className="text-sm font-medium mb-1">Due date</label>
-            <input
-              type="date"
-              className="border p-2 rounded"
+            <label>Due date</label>
+            <input type="date" className="border p-2 rounded"
               value={newTaskDue}
               onChange={(e) => setNewTaskDue(e.target.value)}
             />
           </div>
 
-          <button
-            type="submit"
-            className="mt-1 md:mt-6 px-4 py-2 rounded-lg text-sm font-semibold bg-gray-900 text-white"
-          >
+          <button className="bg-black text-white px-4 py-2 rounded-lg">
             Create Task
           </button>
         </form>
       </section>
 
-      {/* TASK LIST */}
       <section>
         {tasks.length === 0 ? (
-          <p className="text-sm text-gray-500">No tasks yet.</p>
+          <p>No tasks yet.</p>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {tasks.map((t) => (
-              <TaskCard key={t.id} task={{ ...t, onDelete: handleDeleteTask }} />
+              <TaskCard
+                key={t.id}
+                task={{ ...t, onDelete: () => handleDeleteTask(t.id) }}
+              />
             ))}
           </div>
         )}

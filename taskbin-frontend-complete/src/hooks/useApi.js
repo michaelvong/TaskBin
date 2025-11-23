@@ -127,5 +127,15 @@ export function useApi(currentUser) {
         body: JSON.stringify({ user_id: currentUser }),
       });
     },
+
+    async getBoard(boardId) {
+      const r = await awsRequest(`/boards/${boardId}`, {
+        method: "GET",
+      });
+
+      // backend returns batches → extract the first
+      return r.boards?.[0] || null;
+    }
+
   };
 }
