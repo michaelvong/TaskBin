@@ -7,30 +7,26 @@ table = dynamodb.Table(TABLE_NAME)
 
 def lambda_handler(event, context):
     """
-    Lambda for $disconnect route.
-    Removes the connection from DynamoDB when a client disconnects.
+    Removes the WebSocket connection from DynamoDB on disconnect.
     """
+
     try:
-        connection_id = event['requestContext']['connectionId']
+        connection_id = event["requestContext"]["connectionId"]
 
-        # Query for the connection item (board-centric)
-        # We need to scan since we may not know the board_id
-        response = table.scan(
-            FilterExpression="SK = :sk AND Type = :type",
-            ExpressionAttributeValues={
-                ":sk": f"CONNECTION#{connection_id}",
-                ":type": "connection"
-            },
-            ProjectionExpression="PK, SK"
+        # Query to find board owning this connection
+        resp = table.scan(
+            FilterExpression="begins_with(SK, :sk)",
+            ExpressionAttributeValues={":sk": f"CONNECTION#{connection_id}"}
         )
-        items = response.get("Items", [])
 
-        # Delete the connection item(s)
+        items = resp.get("Items", [])
+
+        # Remove each match
         for item in items:
             table.delete_item(Key={"PK": item["PK"], "SK": item["SK"]})
 
-        return {"statusCode": 200, "body": "Disconnected successfully"}
+        return {"statusCode": 200, "body": "Disconnected"}
 
     except Exception as e:
-        print("Error in $disconnect Lambda:", e)
+        print("❌ Disconnect error:", e)
         return {"statusCode": 500, "body": json.dumps({"error": str(e)})}

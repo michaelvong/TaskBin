@@ -111,8 +111,6 @@ def deploy_frontend(
     if not api_id or not websocket_api_id:
         sys.exit("api_id or websocket_api_id missing in api_id.json")
 
-    # Assume stage is 'dev' for WebSocket
-    stage = "dev"
 
     if not hosted_ui_url:
         print("⚠️ Warning: hosted_ui_url not provided, skipping VITE_COGNITO_LOGIN_URL")
@@ -121,7 +119,7 @@ def deploy_frontend(
 
     env_content = (
     f"VITE_API_BASE_URL=https://{api_id}.execute-api.{region}.amazonaws.com/prod\n"
-    f"VITE_WEBSOCKET_API_URL=wss://{websocket_api_id}.execute-api.{region}.amazonaws.com/{stage}\n"
+    f"VITE_WEBSOCKET_API_URL=wss://{websocket_api_id}.execute-api.{region}.amazonaws.com/prod\n"
     f"VITE_COGNITO_LOGIN_URL={hosted_ui_url}\n"
     )
 

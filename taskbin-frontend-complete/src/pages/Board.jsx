@@ -15,17 +15,27 @@ export default function Board() {
   const [members, setMembers] = useState([]);
   const [owner, setOwner] = useState(null);
 
-
-  // create task form state
+  // create task form state (⬅️ YOU NEED THIS)
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskStatus, setNewTaskStatus] = useState("todo");
   const [newTaskAssignee, setNewTaskAssignee] = useState("");
   const [newTaskDue, setNewTaskDue] = useState("");
 
-  // edit modal state
-  const [editingTask, setEditingTask] = useState(null);
 
-  // load board metadata + tasks
+  const [editingTask, setEditingTask] = useState(null);
+  const [socket, setSocket] = useState(null);
+
+  // -----------------------------------
+  // Broadcast helper for WebSocket sends
+  // -----------------------------------
+  function broadcast(action, payload = {}) {
+    if (!socket || socket.readyState !== WebSocket.OPEN) return;
+    socket.send(JSON.stringify({ action, ...payload }));
+  }
+
+  // -----------------------------------
+  // Initial board load (metadata + tasks)
+  // -----------------------------------
   useEffect(() => {
     if (!user?.email) return;
 
@@ -35,13 +45,14 @@ export default function Board() {
         setBoard(meta);
         setMembers(meta?.members || []);
         setOwner(meta?.owner_id || null);
-        
+
         const ts = await api.listTasks(id);
-        const normalized = ts.map((t) => ({
-          ...t,
-          id: t.task_id, // normalize
-        }));
-        setTasks(normalized);
+        setTasks(
+          ts.map((t) => ({
+            ...t,
+            id: t.task_id,
+          }))
+        );
       } catch (err) {
         console.error("Failed loading board or tasks:", err);
       }
@@ -50,30 +61,73 @@ export default function Board() {
     init();
   }, [id, user?.email]);
 
-  // -------------------------------
-  // GENERATE ACCESS CODE
-  // -------------------------------
+  // -----------------------------------
+  // WebSocket setup
+  // -----------------------------------
+  useEffect(() => {
+    if (!user?.email || !id) return;
+
+    const wsUrl =
+      `${import.meta.env.VITE_WEBSOCKET_API_URL}?` +
+      `user_id=${encodeURIComponent(user.email)}` +
+      `&board_id=${encodeURIComponent(id)}`;
+
+    console.log("Connecting WS:", wsUrl);
+
+    const ws = new WebSocket(wsUrl);
+    setSocket(ws);
+
+    ws.onopen = () => {
+      console.log("WS connected");
+    };
+
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      console.log("WS message:", data);
+
+      // 🔥 Task updates
+      if (data.action === "taskUpdated") {
+        api.listTasks(id).then((ts) =>
+          setTasks(ts.map((t) => ({ ...t, id: t.task_id })))
+        );
+      }
+
+      // 🔥 Member joins
+      if (data.action === "memberJoined") {
+        api.listBoardMembers(id).then((members) => setMembers(members));
+      }
+    };
+
+    ws.onclose = () => {
+      console.log("WS disconnected");
+    };
+
+    return () => ws.close();
+  }, [user?.email, id]);
+
+  // -----------------------------------
+  // Generate Access Code
+  // -----------------------------------
   async function handleGenerateCode() {
     try {
       const res = await api.generateCode(id);
-
       const code = res?.access_code;
+
       if (!code) {
         alert("Failed to generate code — backend returned no access_code");
         return;
       }
-      alert(`Access Code for this board: ${code}`);
 
+      alert(`Access Code for this board: ${code}`);
     } catch (err) {
       console.error("Error generating code:", err);
       alert("Failed to generate access code.");
     }
   }
 
-
-  // -------------------------------
-  // CREATE TASK
-  // -------------------------------
+  // -----------------------------------
+  // Create Task
+  // -----------------------------------
   async function handleCreateTask(e) {
     e.preventDefault();
     if (!newTaskTitle.trim()) return;
@@ -86,40 +140,58 @@ export default function Board() {
       finish_by: newTaskDue ? new Date(newTaskDue).toISOString() : null,
     });
 
-    // reset form
+    // Clear form
     setNewTaskTitle("");
     setNewTaskStatus("todo");
     setNewTaskAssignee("");
     setNewTaskDue("");
 
-    // refresh tasks
+    // Refresh UI
     const refreshed = await api.listTasks(id);
-    setTasks(refreshed.map((t) => ({ ...t, id: t.id || t.task_id })));
+    setTasks(refreshed.map((t) => ({ ...t, id: t.task_id })));
+
+    // Broadcast update
+    broadcast("taskUpdated", {
+      board_id: id,
+      user_id: user.email,
+      message: "created"
+    });
   }
 
-  // -------------------------------
-  // DELETE TASK
-  // -------------------------------
+  // -----------------------------------
+  // Delete Task
+  // -----------------------------------
   async function handleDeleteTask(taskId) {
     await api.deleteTask(id, taskId);
+
     setTasks((prev) => prev.filter((t) => (t.id || t.task_id) !== taskId));
+
+    broadcast("taskUpdated", {
+      board_id: id,
+      user_id: user.email,
+      message: "deleted"
+    });
   }
 
-  // -------------------------------
-  // EDIT TASK
-  // -------------------------------
+  // -----------------------------------
+  // Edit Task
+  // -----------------------------------
   async function handleEditTask(taskId, updates) {
     await api.editTask(taskId, updates);
 
     const refreshed = await api.listTasks(id);
-    setTasks(refreshed.map((t) => ({ ...t, id: t.id || t.task_id })));
+    setTasks(refreshed.map((t) => ({ ...t, id: t.task_id })));
 
     setEditingTask(null);
+
+    broadcast("taskUpdated", {
+      board_id: id,
+      user_id: user.email,
+      message: "updated"
+    });
+
   }
 
-  // -------------------------------
-  // RENDER
-  // -------------------------------
   return (
     <div className="max-w-5xl mx-auto p-4 space-y-6">
       <Link to="/" className="text-sm text-blue-600 hover:underline">
@@ -134,7 +206,6 @@ export default function Board() {
           )}
         </div>
 
-        {/* 🔥 Generate Access Code Button */}
         <button
           onClick={handleGenerateCode}
           className="bg-purple-600 text-white px-3 py-2 rounded-lg shadow hover:bg-purple-700 transition"
@@ -260,7 +331,6 @@ export default function Board() {
         )}
       </section>
 
-      {/* EDIT MODAL */}
       {editingTask && (
         <EditTaskModal
           task={editingTask}
