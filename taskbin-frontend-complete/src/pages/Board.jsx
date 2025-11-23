@@ -12,6 +12,9 @@ export default function Board() {
 
   const [board, setBoard] = useState(null);
   const [tasks, setTasks] = useState([]);
+  const [members, setMembers] = useState([]);
+  const [owner, setOwner] = useState(null);
+
 
   // create task form state
   const [newTaskTitle, setNewTaskTitle] = useState("");
@@ -30,7 +33,9 @@ export default function Board() {
       try {
         const meta = await api.getBoard(id);
         setBoard(meta);
-
+        setMembers(meta?.members || []);
+        setOwner(meta?.owner_id || null);
+        
         const ts = await api.listTasks(id);
         const normalized = ts.map((t) => ({
           ...t,
@@ -137,6 +142,47 @@ export default function Board() {
           Generate Access Code
         </button>
       </header>
+
+      {/* MEMBERS LIST */}
+      <section className="bg-white rounded-xl shadow p-4 space-y-3">
+        <h2 className="text-lg font-semibold">Members</h2>
+
+        {/* OWNER */}
+        <div>
+          <p className="text-sm font-semibold mb-1">Owner</p>
+          <div className="bg-purple-50 px-3 py-2 rounded-lg flex justify-between">
+            <span>{owner}</span>
+            <span className="px-2 py-1 text-xs bg-purple-200 text-purple-800 rounded-full">
+              owner
+            </span>
+          </div>
+        </div>
+
+        {/* MEMBERS */}
+        <div>
+          <p className="text-sm font-semibold mt-3 mb-1">Members</p>
+
+          {members.filter((m) => m.user_id !== owner).length === 0 ? (
+            <p className="text-sm text-gray-500">No other members.</p>
+          ) : (
+            <ul className="space-y-1 text-sm">
+              {members
+                .filter((m) => m.user_id !== owner)
+                .map((m) => (
+                  <li
+                    key={m.user_id}
+                    className="flex justify-between bg-gray-50 px-3 py-2 rounded-lg"
+                  >
+                    <span>{m.user_id}</span>
+                    <span className="px-2 py-1 text-xs bg-gray-200 text-gray-600 rounded-full">
+                      member
+                    </span>
+                  </li>
+                ))}
+            </ul>
+          )}
+        </div>
+      </section>
 
       {/* CREATE TASK */}
       <section className="bg-white rounded-xl shadow p-4 space-y-3">
