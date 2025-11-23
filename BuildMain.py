@@ -7,6 +7,9 @@ from TaskBin.CreateScripts.DeployAmplify import deploy_frontend
 import boto3
 import time
 import os
+import uuid
+from datetime import datetime, UTC
+
 
 def update_cognito_redirects(user_pool_id, client_id, frontend_url, region="us-west-1"):
     cognito = boto3.client("cognito-idp", region_name=region)
@@ -25,6 +28,44 @@ def update_cognito_redirects(user_pool_id, client_id, frontend_url, region="us-w
 
     print("✔ Cognito redirect URLs updated.")
 
+def create_dummy_board():
+    dynamodb = boto3.resource("dynamodb")
+    table = dynamodb.Table("TaskBin")
+
+    dummy_user_id = "testuser@example.com"
+    board_id = str(uuid.uuid4())
+    now = datetime.now(UTC).isoformat()
+
+    print("🧪 Inserting dummy board into DynamoDB...")
+
+    # Board metadata
+    metadata = {
+        "PK": f"BOARD#{board_id}",
+        "SK": "METADATA",
+        "type": "board",
+        "board_id": board_id,
+        "board_name": "Dummy Board",
+        "description": "Automatically inserted during TaskBin setup.",
+        "created_at": now,
+        "owner_id": dummy_user_id,
+    }
+
+    # Membership row so it shows up in listBoards
+    membership = {
+        "PK": f"USER#{dummy_user_id}",
+        "SK": f"BOARD#{board_id}",
+        "type": "membership",
+        "board_id": board_id,
+        "user_id": dummy_user_id,
+        "role": "owner",
+        "joined_at": now,
+    }
+
+    table.put_item(Item=metadata)
+    table.put_item(Item=membership)
+
+    print("✔ Dummy board created!")
+
 def main():
     print("=" * 30 + " Starting TaskBin AWS setup... " + "=" * 30)
 
@@ -35,12 +76,12 @@ def main():
     temp_frontend = "http://localhost:5173"
     user_pool_id, client_id, domain_prefix = setup_cognito()
 
-
     # ------------------------------------------------------------
     # 2. Create DynamoDB Table
     # ------------------------------------------------------------
     print("=" * 30 + " Creating DynamoDB table..." + "=" * 30)
     create_table()
+
 
     # ------------------------------------------------------------
     # 3. Create Lambdas
@@ -96,6 +137,11 @@ def main():
     # ------------------------------------------------------------
     print("=" * 30 + " Re-deploying Frontend (with login URL) " + "=" * 30)
     deploy_frontend(hosted_ui_url=hosted_ui_url)
+
+    # ------------------------------------------------------------
+    # 2B. Insert Dummy Board
+    # ------------------------------------------------------------
+    create_dummy_board()
 
     # ------------------------------------------------------------
     # FINAL DEBUG SUMMARY
